@@ -1,5 +1,7 @@
 #include <fcntl.h>
 #include <semaphore.h>
+#include <signal.h>
+#include <stdatomic.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -8,6 +10,19 @@
 
 #include "request.h"
 #include "utils.h"
+
+//---- [STOP] ----------------------------------------------------------------//
+//----------------------------------------------------------------------------//
+
+static atomic_int running = 1;
+static sem_t *g_mutex_full = SEM_FAILED;
+
+void handle_sigint(int sig) {
+  (void)sig;
+  running = 0;
+  if (g_mutex_full != SEM_FAILED)
+    sem_post(g_mutex_full);
+}
 
 //---- [CODE] ----------------------------------------------------------------//
 //----------------------------------------------------------------------------//
@@ -20,6 +35,12 @@ int main(int argc, char *argv[]) {
   sem_t *mutex_full = SEM_FAILED;
   sem_t *mutex_write = SEM_FAILED;
   int fd = -1;
+
+  // SETUP SIGNAL HANDLER
+  struct sigaction sa;
+  memset(&sa, 0, sizeof(sa));
+  sa.sa_handler = handle_sigint;
+  sigaction(SIGINT, &sa, nullptr);
 
   // CLEAN
   sem_unlink(REQUEST_EMPTY_PATH);
@@ -69,14 +90,19 @@ int main(int argc, char *argv[]) {
   }
 
   // READ REQUEST
+  g_mutex_full = mutex_full;
   int rd = 0;
-  while (true) {
+  while (running) {
     P(mutex_full);
+    if (!running) {
+      break;
+    }
     filter_request_t rq = rqs->buffer[rd];
     rd = (rd + 1) % REQUEST_FIFO_SIZE;
     V(mutex_empty);
     printf("%s\n", rq.path);
   }
+  printf("Server is shuting down...\n");
 dispose:
   if (rqs != MAP_FAILED && munmap(rqs, sizeof(request_t)) == -1) {
     MESSAGE_ERR(argv[0], "munmap");
@@ -114,5 +140,6 @@ dispose:
     MESSAGE_ERR(argv[0], "sem_unlink");
     ret = EXIT_FAILURE;
   }
+  printf("Server is shut down...\n");
   return ret;
 }
