@@ -166,7 +166,7 @@ void start_worker(filter_request_t *rq) {
   int ret = EXIT_SUCCESS;
   char fifo_path[256];
   fifo_path[0] = '\0';
-  int fifo;
+  int fifo = -1;
 
   // OPEN FIFO RESPONS
   snprintf(fifo_path, sizeof(fifo_path), "%s%d", FIFO_RESPONSE_BASE_PATH,
@@ -176,11 +176,13 @@ void start_worker(filter_request_t *rq) {
     ret = EXIT_FAILURE;
     goto dispose;
   }
-  full_write(fifo, &ret, sizeof(ret));
 dispose:
   if (fifo != -1 && close(fifo) == -1) {
     MESSAGE_ERR("server worker", "close");
     ret = EXIT_FAILURE;
+  }
+  if (fifo != -1) {
+    full_write(fifo, &ret, sizeof(ret));
   }
   return;
 }
