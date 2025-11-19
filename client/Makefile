@@ -6,9 +6,10 @@ LDFLAGS = -lm -lrt
 
 TARGET = build/run
 
-SRC = $(wildcard src/*.c)
+SRC_LOCAL = $(wildcard src/*.c)
+SHARED_SRC = ../shared/full_io.c
 
-OBJ = $(SRC:src/%.c=build/%.o)
+OBJ = $(SRC_LOCAL:src/%.c=build/%.o) build/full_io.o
 
 DEP = $(OBJ:.o=.d)
 
@@ -18,6 +19,9 @@ $(TARGET): $(OBJ)
 	$(CC) -o $@ $(OBJ) $(LDFLAGS)
 
 build/%.o: src/%.c | build
+	$(CC) -c $< -o $@ $(CFLAGS)
+
+build/full_io.o: $(SHARED_SRC) | build
 	$(CC) -c $< -o $@ $(CFLAGS)
 
 build:

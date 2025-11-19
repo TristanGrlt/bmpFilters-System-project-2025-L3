@@ -7,6 +7,7 @@
 #include <sys/mman.h>
 #include <unistd.h>
 
+#include "full_io.h"
 #include "request.h"
 #include "utils.h"
 
@@ -119,7 +120,15 @@ int main(int argc, char *argv[]) {
     ret = EXIT_FAILURE;
     goto dispose;
   }
-
+  // READ TO DETECT EXIT_FAILURE OF THE SERVER
+  int err;
+  full_read(fifo, &err, sizeof(err));
+  if (err == EXIT_FAILURE) {
+    printf("%s : %s\n", argv[0],
+           "An unexpected error append, please try again later");
+    ret = EXIT_FAILURE;
+    goto dispose;
+  }
 dispose:
   if (rqs != MAP_FAILED) {
     if (munmap(rqs, sizeof(request_t)) == -1) {

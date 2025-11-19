@@ -9,8 +9,11 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
+#include "full_io.h"
 #include "request.h"
 #include "utils.h"
+
+void start_worker(filter_request_t *rq);
 
 //---- [STOP] ----------------------------------------------------------------//
 //----------------------------------------------------------------------------//
@@ -109,7 +112,7 @@ int main(int argc, char *argv[]) {
       break;
     case 0:
       printf("Processing new request from pid:%d client\n", rq.pid);
-      // processing...
+      start_worker(&rq);
       printf("Process ended for request from pid:%d client\n", rq.pid);
       exit(EXIT_SUCCESS);
     default:
@@ -157,4 +160,27 @@ dispose:
   }
   printf("Server is shut down !\n");
   return ret;
+}
+
+void start_worker(filter_request_t *rq) {
+  int ret = EXIT_SUCCESS;
+  char fifo_path[256];
+  fifo_path[0] = '\0';
+  int fifo;
+
+  // OPEN FIFO RESPONS
+  snprintf(fifo_path, sizeof(fifo_path), "%s%d", FIFO_RESPONSE_BASE_PATH,
+           rq->pid);
+  if ((fifo = open(fifo_path, O_WRONLY)) == -1) {
+    MESSAGE_ERR("server worker", "open");
+    ret = EXIT_FAILURE;
+    goto dispose;
+  }
+  full_write(fifo, &ret, sizeof(ret));
+dispose:
+  if (fifo != -1 && close(fifo) == -1) {
+    MESSAGE_ERR("server worker", "close");
+    ret = EXIT_FAILURE;
+  }
+  return;
 }
