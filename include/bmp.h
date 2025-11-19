@@ -5,6 +5,8 @@
 #include <stdint.h>
 #include <sys/mman.h>
 
+#define BMP_SIGNATURE 0x4D42
+
 typedef struct __attribute__((packed)) {
   uint16_t signature;
   uint32_t file_size;

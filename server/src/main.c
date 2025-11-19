@@ -211,6 +211,13 @@ void start_worker(filter_request_t *rq) {
     goto dispose;
   }
   img.file_h = (bmp_file_header_t *)mapped_data;
+  // CHECK FILE TYPE VALIDITY
+  if (img.file_h->signature != BMP_SIGNATURE) {
+    errno = EINVAL;
+    MESSAGE_ERR("server worker", rq->path);
+    ret = errno;
+    goto dispose;
+  }
   img.dib_h =
       (bmp_dib_header_t *)((char *)mapped_data + sizeof(bmp_file_header_t));
   img.pixels = (u_int8_t *)mapped_data + img.file_h->pixel_array_offset;
