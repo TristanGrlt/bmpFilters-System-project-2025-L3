@@ -14,8 +14,6 @@
 #define REQUEST_FULL_PATH "/mutex_full"
 #define REQUEST_WRITE_PATH "/mutex_write"
 
-#define PERMS (S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH)
-
 #define MAX_PATH_LENGTH 256
 
 typedef enum { blanckAndWhite } filter_t;

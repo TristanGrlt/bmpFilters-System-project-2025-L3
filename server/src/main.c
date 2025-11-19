@@ -70,13 +70,13 @@ int main(int argc, char *argv[]) {
 
   // READ REQUEST
   int rd = 0;
-  // while (true) {
-  P(mutex_full);
-  filter_request_t rq = rqs->buffer[rd];
-  rd = (rd + 1) % REQUEST_FIFO_SIZE;
-  V(mutex_empty);
-  printf("%s\n", rq.path);
-  // }
+  while (true) {
+    P(mutex_full);
+    filter_request_t rq = rqs->buffer[rd];
+    rd = (rd + 1) % REQUEST_FIFO_SIZE;
+    V(mutex_empty);
+    printf("%s\n", rq.path);
+  }
 dispose:
   if (rqs != MAP_FAILED && munmap(rqs, sizeof(request_t)) == -1) {
     MESSAGE_ERR(argv[0], "munmap");

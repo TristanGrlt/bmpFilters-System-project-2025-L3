@@ -29,10 +29,17 @@
 
 int main(int argc, char *argv[]) {
   int ret = EXIT_SUCCESS;
+  filter_request_t rq;
   sem_t *mutex_empty = SEM_FAILED;
   sem_t *mutex_full = SEM_FAILED;
   sem_t *mutex_write = SEM_FAILED;
+  int fd = -1;
+  request_t *rqs = MAP_FAILED;
+  int fifo = -1;
+  char fifo_path[256];
+  fifo_path[0] = '\0';
 
+  // PARSE ARGS
   if (argc < REQUIRED_ARG_COUNT + 1) {
     ERROR_MESSAGE(EXE(argv[0]), SIMPLEARGS_ERR_MISSING_ARGS, REQUIRED_ARG_COUNT,
                   argc - 1);
@@ -43,7 +50,8 @@ int main(int argc, char *argv[]) {
   if (!easyargs_parse_args(argc, argv, &args)) {
     return EXIT_FAILURE;
   }
-  filter_request_t rq;
+
+  // CREATE REQUEST
   rq.pid = getpid();
   strncpy(rq.path, args.input_file, MAX_PATH_LENGTH - 1);
   rq.path[MAX_PATH_LENGTH - 1] = '\0';
@@ -51,9 +59,6 @@ int main(int argc, char *argv[]) {
     rq.filter = blanckAndWhite;
   }
   (void)rq;
-
-  int fd = -1;
-  request_t *rqs = MAP_FAILED;
 
   // MUTEX
   if ((mutex_empty = sem_open(REQUEST_EMPTY_PATH, 0)) == SEM_FAILED) {
@@ -101,6 +106,20 @@ int main(int argc, char *argv[]) {
   rqs->write = (rqs->write + 1) % REQUEST_FIFO_SIZE;
   V(mutex_write);
   V(mutex_full);
+  // WAIT RESPONSE
+  snprintf(fifo_path, 255, "%s%d", FIFO_RESPONSE_BASE_PATH, getpid());
+  if (mkfifo(fifo_path, PERMS) == -1) {
+    MESSAGE_ERR(argv[0], "mkfifo");
+    ret = EXIT_FAILURE;
+    goto dispose;
+  }
+  fifo = open(fifo_path, O_RDONLY);
+  if (fifo == -1) {
+    MESSAGE_ERR(argv[0], "open");
+    ret = EXIT_FAILURE;
+    goto dispose;
+  }
+
 dispose:
   if (rqs != MAP_FAILED) {
     if (munmap(rqs, sizeof(request_t)) == -1) {
@@ -108,8 +127,9 @@ dispose:
       ret = EXIT_FAILURE;
     }
   }
-  if (fd != -1) {
-    close(fd);
+  if (fd != -1 && close(fd) == -1) {
+    MESSAGE_ERR(argv[0], "close");
+    ret = EXIT_FAILURE;
   }
   if (mutex_empty != SEM_FAILED && sem_close(mutex_empty) == -1) {
     MESSAGE_ERR(argv[0], "sem_close");
@@ -121,6 +141,14 @@ dispose:
   }
   if (mutex_write != SEM_FAILED && sem_close(mutex_write) == -1) {
     MESSAGE_ERR(argv[0], "sem_close");
+    ret = EXIT_FAILURE;
+  }
+  if (fifo != -1 && close(fifo) == -1) {
+    MESSAGE_ERR(argv[0], "close");
+    ret = EXIT_FAILURE;
+  }
+  if (fifo_path[0] != '\0' && unlink(fifo_path) == -1) {
+    MESSAGE_ERR(argv[0], "unlink");
     ret = EXIT_FAILURE;
   }
   return ret;
