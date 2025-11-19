@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/mman.h>
+#include <sys/wait.h>
 #include <unistd.h>
 
 #include "request.h"
@@ -100,7 +101,21 @@ int main(int argc, char *argv[]) {
     filter_request_t rq = rqs->buffer[rd];
     rd = (rd + 1) % REQUEST_FIFO_SIZE;
     V(mutex_empty);
-    printf("%s\n", rq.path);
+    switch (fork()) {
+    case -1:
+      MESSAGE_ERR(argv[0], "fork");
+      ret = EXIT_FAILURE;
+      running = 0;
+      break;
+    case 0:
+      printf("Processing new request from pid:%d client\n", rq.pid);
+      // processing...
+      printf("Process ended for request from pid:%d client\n", rq.pid);
+      exit(EXIT_SUCCESS);
+    default:
+      waitpid(-1, NULL, WNOHANG);
+      break;
+    }
   }
   printf("\nServer is shuting down...\n");
 dispose:
