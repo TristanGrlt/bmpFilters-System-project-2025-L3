@@ -4,6 +4,8 @@
 #include <errno.h>
 #include <semaphore.h>
 
+#define MAX_SIZE_FILE 100000000 // 100MB
+
 #define PERMS (S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH)
 
 #define MESSAGE_ERR(prog, func)                                                \
