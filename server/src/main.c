@@ -102,7 +102,7 @@ int main(int argc, char *argv[]) {
     V(mutex_empty);
     printf("%s\n", rq.path);
   }
-  printf("Server is shuting down...\n");
+  printf("\nServer is shuting down...\n");
 dispose:
   if (rqs != MAP_FAILED && munmap(rqs, sizeof(request_t)) == -1) {
     MESSAGE_ERR(argv[0], "munmap");
@@ -140,6 +140,6 @@ dispose:
     MESSAGE_ERR(argv[0], "sem_unlink");
     ret = EXIT_FAILURE;
   }
-  printf("Server is shut down...\n");
+  printf("Server is shut down !\n");
   return ret;
 }
