@@ -30,7 +30,6 @@
 
 int main(int argc, char *argv[]) {
   int ret = EXIT_SUCCESS;
-  struct stat s;
   filter_request_t rq;
   sem_t *mutex_empty = SEM_FAILED;
   sem_t *mutex_full = SEM_FAILED;
@@ -51,18 +50,6 @@ int main(int argc, char *argv[]) {
   simpleargs_args_t args = easyargs_make_default_args();
   if (!easyargs_parse_args(argc, argv, &args)) {
     return EXIT_FAILURE;
-  }
-  // CHECK VALIDE IMAGE SIZE
-  if (lstat(args.input_file, &s) != 0) {
-    MESSAGE_ERR(argv[0], args.input_file);
-    ret = EXIT_FAILURE;
-    goto dispose;
-  }
-  if (s.st_size > MAX_SIZE_FILE) {
-    errno = EFBIG;
-    MESSAGE_ERR(argv[0], args.input_file);
-    ret = EXIT_FAILURE;
-    goto dispose;
   }
 
   // CREATE REQUEST
@@ -136,9 +123,11 @@ int main(int argc, char *argv[]) {
   // READ TO DETECT EXIT_FAILURE OF THE SERVER
   int err;
   full_read(fifo, &err, sizeof(err));
-  if (err == EXIT_FAILURE) {
-    printf("%s : %s\n", argv[0],
-           "An unexpected error append, please try again later");
+  if (err != EXIT_SUCCESS) {
+    errno = err;
+    MESSAGE_ERR(argv[0], "server");
+    // printf("%s : %s\n", argv[0],
+    //  "An unexpected error append, please try again later");
     ret = EXIT_FAILURE;
     goto dispose;
   }

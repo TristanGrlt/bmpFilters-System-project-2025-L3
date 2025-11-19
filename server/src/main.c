@@ -9,6 +9,7 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
+#include "bmp.h"
 #include "full_io.h"
 #include "request.h"
 #include "utils.h"
@@ -164,25 +165,74 @@ dispose:
 
 void start_worker(filter_request_t *rq) {
   int ret = EXIT_SUCCESS;
+  struct stat s;
   char fifo_path[256];
   fifo_path[0] = '\0';
   int fifo = -1;
+  int fd = -1;
+  void *mapped_data = MAP_FAILED;
+  bmp_mapped_image_t img;
 
   // OPEN FIFO RESPONS
   snprintf(fifo_path, sizeof(fifo_path), "%s%d", FIFO_RESPONSE_BASE_PATH,
            rq->pid);
   if ((fifo = open(fifo_path, O_WRONLY)) == -1) {
     MESSAGE_ERR("server worker", "open");
-    ret = EXIT_FAILURE;
+    ret = errno;
     goto dispose;
   }
+
+  // CHECK VALIDE IMAGE SIZE
+  if (lstat(rq->path, &s) != 0) {
+    MESSAGE_ERR("server worker", rq->path);
+    ret = errno;
+    goto dispose;
+  }
+  if (s.st_size > MAX_SIZE_FILE) {
+    errno = EFBIG;
+    MESSAGE_ERR("server worker", rq->path);
+    ret = errno;
+    goto dispose;
+  }
+
+  // OPEN IMAGE FILE
+  fd = open(rq->path, O_RDONLY);
+  if (fd == -1) {
+    MESSAGE_ERR("server worker", "open");
+    ret = errno;
+    goto dispose;
+  }
+
+  // MAP
+  mapped_data = mmap(NULL, (size_t)s.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
+  if (mapped_data == MAP_FAILED) {
+    MESSAGE_ERR("server worker", "mmap");
+    ret = errno;
+    goto dispose;
+  }
+  img.file_h = (bmp_file_header_t *)mapped_data;
+  img.dib_h =
+      (bmp_dib_header_t *)((char *)mapped_data + sizeof(bmp_file_header_t));
+  img.pixels = (u_int8_t *)mapped_data + img.file_h->pixel_array_offset;
+
+  printf("\tWidth: %d, Height: %u\n", img.dib_h->width, img.dib_h->height);
+
 dispose:
-  if (fifo != -1 && close(fifo) == -1) {
+  if (fd != -1 && close(fd) == -1) {
     MESSAGE_ERR("server worker", "close");
     ret = EXIT_FAILURE;
   }
+  if (mapped_data != MAP_FAILED) {
+    if (munmap(mapped_data, (size_t)s.st_size) == -1) {
+      MESSAGE_ERR("server worker", "munmap");
+      ret = EXIT_FAILURE;
+    }
+  }
   if (fifo != -1) {
     full_write(fifo, &ret, sizeof(ret));
+  }
+  if (fifo != -1 && close(fifo) == -1) {
+    MESSAGE_ERR("server worker", "close");
   }
   return;
 }
