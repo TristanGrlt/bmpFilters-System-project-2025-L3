@@ -29,16 +29,18 @@ typedef struct {
   uint32_t colors_important;
 } bmp_dib_header_t;
 
-// typedef struct {
-//   uint8_t b;
-//   uint8_t g;
-//   uint8_t r;
-// } bmp_pixel_t;
-
 typedef struct {
   bmp_file_header_t *file_h;
   bmp_dib_header_t *dib_h;
   void *pixels;
 } bmp_mapped_image_t;
+
+typedef struct {
+  bmp_mapped_image_t *img;
+  int32_t start_line; // (inclusif)
+  int32_t end_line;   // (exclusif)
+} thread_filter_args_t;
+
+void *identity_filter(void *arg);
 
 #endif

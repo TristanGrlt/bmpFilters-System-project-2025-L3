@@ -1,10 +1,12 @@
 #include <errno.h>
 #include <fcntl.h>
+#include <linux/limits.h>
 #include <semaphore.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/mman.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 #include "full_io.h"
@@ -17,11 +19,16 @@
 #define REQUIRED_ARG_COUNT 2
 
 #define SIMPLEARGS_REQUIRED_ARGS                                               \
-  SIMPLEARGS_REQUIRED_STRING_ARG(input_file, "input", "Input image path", true)
+  SIMPLEARGS_REQUIRED_STRING_ARG(input_file, "input", "Input image path",      \
+                                 true)                                         \
+  SIMPLEARGS_REQUIRED_STRING_ARG(output_file, "output", "Output image path",   \
+                                 true)
 
 #define SIMPLEARGS_BOOLEAN_ARGS                                                \
   SIMPLEARGS_BOOLEAN_ARG(b_and_w, "b&w", "blackAndWhite",                      \
-                         "Apply a black and white filter to the image")
+                         "Apply a black and white filter to the image")        \
+  SIMPLEARGS_BOOLEAN_ARG(identity, "id", "identity",                           \
+                         "Apply no filter to the image")
 
 #include "simpleargs.h"
 
@@ -41,7 +48,7 @@ int main(int argc, char *argv[]) {
   fifo_path[0] = '\0';
 
   // PARSE ARGS
-  if (argc < REQUIRED_ARG_COUNT + 1) {
+  if (argc < 4) {
     ERROR_MESSAGE(EXE(argv[0]), SIMPLEARGS_ERR_MISSING_ARGS, REQUIRED_ARG_COUNT,
                   argc - 1);
     easyargs_print_help(argv[0]);
@@ -59,15 +66,17 @@ int main(int argc, char *argv[]) {
   if (args.b_and_w) {
     rq.filter = blanckAndWhite;
   }
-  (void)rq;
+  if (args.identity) {
+    rq.filter = identity;
+  }
 
   // MUTEX
   if ((mutex_empty = sem_open(REQUEST_EMPTY_PATH, 0)) == SEM_FAILED) {
     if (errno == ENOENT) {
-      fprintf(
-          stderr,
-          "%s: Error: Server is not running. Please start the server first.\n",
-          argv[0]);
+      fprintf(stderr,
+              "%s: Error: Server is not running. Please "
+              "start the server first.\n",
+              argv[0]);
       ret = EXIT_FAILURE;
       goto dispose;
     } else {
@@ -126,11 +135,58 @@ int main(int argc, char *argv[]) {
   if (err != EXIT_SUCCESS) {
     errno = err;
     MESSAGE_ERR(argv[0], "server");
-    // printf("%s : %s\n", argv[0],
-    //  "An unexpected error append, please try again later");
+    ret = EXIT_FAILURE;
+    goto dispose;
+  } else {
+    printf("filter applyed with succes, getting the image back...\n");
+  }
+
+  // READ IMAGE BACK
+  int fd_out = open(args.output_file, O_WRONLY | O_CREAT | O_TRUNC, PERMS);
+  if (fd_out == -1) {
+    MESSAGE_ERR(argv[0], "open output file");
     ret = EXIT_FAILURE;
     goto dispose;
   }
+
+  struct stat s;
+  if (stat(args.input_file, &s) != 0) {
+    MESSAGE_ERR(argv[0], "stat");
+    close(fd_out);
+    ret = EXIT_FAILURE;
+    goto dispose;
+  }
+
+  size_t count = (size_t)s.st_size;
+  char buffer[PIPE_BUF];
+  while (count > 0) {
+    size_t n_r = count;
+    if (n_r > PIPE_BUF) {
+      n_r = PIPE_BUF;
+    }
+    if (full_read(fifo, buffer, n_r) == -1) {
+      MESSAGE_ERR(argv[0], "full_read");
+      close(fd_out);
+      ret = EXIT_FAILURE;
+      goto dispose;
+    }
+    if (full_write(fd_out, buffer, n_r) == -1) {
+      MESSAGE_ERR(argv[0], "full_write");
+      close(fd_out);
+      ret = EXIT_FAILURE;
+      goto dispose;
+    }
+    count -= n_r;
+  }
+
+  if (close(fd_out) == -1) {
+    MESSAGE_ERR(argv[0], "close output file");
+    ret = EXIT_FAILURE;
+    goto dispose;
+  }
+
+  printf("Image created with success\n");
+
 dispose:
   if (rqs != MAP_FAILED) {
     if (munmap(rqs, sizeof(request_t)) == -1) {

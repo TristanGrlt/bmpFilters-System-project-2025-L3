@@ -1,4 +1,6 @@
 #include <fcntl.h>
+#include <linux/limits.h>
+#include <pthread.h>
 #include <semaphore.h>
 #include <signal.h>
 #include <stdatomic.h>
@@ -16,6 +18,9 @@
 #include "utils.h"
 
 #define PID_FILE "/tmp/bmp_server.pid"
+
+#define MIN_THREAD 4
+#define MAX_THREAD 8
 
 void start_worker(filter_request_t *rq);
 
@@ -114,7 +119,7 @@ int daemonize(void) {
   return 0;
 }
 
-//---- [CODE] ----------------------------------------------------------------//
+//---- [MAIN] ----------------------------------------------------------------//
 //----------------------------------------------------------------------------//
 
 int main(int argc, char *argv[]) {
@@ -230,7 +235,7 @@ int main(int argc, char *argv[]) {
     case 0:
       MESSAGE_INFO_D(argv[0], "Processing new request");
       start_worker(&rq);
-      MESSAGE_INFO_D(argv[0], "Process ended for request from pid:%d client\n");
+      MESSAGE_INFO_D(argv[0], "Processing ended for a request");
       exit(EXIT_SUCCESS);
     default:
       // waitpid(-1, NULL, WNOHANG);
@@ -281,6 +286,40 @@ dispose:
     closelog();
   }
   return ret;
+}
+
+//---- [WORKER] --------------------------------------------------------------//
+//----------------------------------------------------------------------------//
+
+int apply_filter(filter_t filter, bmp_mapped_image_t *img);
+
+int calculate_thread_count(off_t file_size) {
+  int thread_count =
+      MIN_THREAD +
+      (int)((file_size * (MAX_THREAD - MIN_THREAD)) / MAX_SIZE_FILE);
+  if (thread_count < MIN_THREAD)
+    thread_count = MIN_THREAD;
+  if (thread_count > MAX_THREAD)
+    thread_count = MAX_THREAD;
+  return thread_count;
+}
+
+// Calcule la répartition homogène des lignes entre les threads
+// Retourne un tableau de (thread_count + 1) éléments contenant les indices de
+// début/fin Exemple: height=14, threads=3 -> [0, 5, 10, 14] (tailles: 5, 5, 4)
+int32_t *calculate_line_distribution(int32_t height, int thread_count) {
+  int32_t *distribution = malloc(sizeof(int32_t) * (size_t)(thread_count + 1));
+  if (distribution == nullptr) {
+    return nullptr;
+  }
+  int32_t base_lines = height / thread_count;
+  int32_t extra_lines = height % thread_count;
+  distribution[0] = 0;
+  for (int i = 0; i < thread_count; i++) {
+    int32_t lines_for_this_thread = base_lines + (i < extra_lines ? 1 : 0);
+    distribution[i + 1] = distribution[i] + lines_for_this_thread;
+  }
+  return distribution;
 }
 
 void start_worker(filter_request_t *rq) {
@@ -342,7 +381,32 @@ void start_worker(filter_request_t *rq) {
       (bmp_dib_header_t *)((char *)mapped_data + sizeof(bmp_file_header_t));
   img.pixels = (u_int8_t *)mapped_data + img.file_h->pixel_array_offset;
 
-  // printf("\tWidth: %d, Height: %u\n", img.dib_h->width, img.dib_h->height);
+  if ((ret = apply_filter(rq->filter, &img)) != EXIT_SUCCESS) {
+    goto dispose;
+  }
+
+  // SEND IMAGE BACK
+  if (full_write(fifo, &ret, sizeof(ret)) == -1) {
+    MESSAGE_ERR_D("server worker", "full_write");
+    ret = errno;
+    goto dispose;
+  }
+
+  size_t count = (size_t)s.st_size;
+  const char *ptr = (const char *)mapped_data;
+  while (count > 0) {
+    size_t n_w = count;
+    if (n_w > PIPE_BUF) {
+      n_w = PIPE_BUF;
+    }
+    if (full_write(fifo, ptr, n_w) == -1) {
+      MESSAGE_ERR_D("server worker", "full_write");
+      ret = errno;
+      goto dispose;
+    }
+    ptr += n_w;
+    count -= n_w;
+  }
 
 dispose:
   if (fd != -1 && close(fd) == -1) {
@@ -362,4 +426,63 @@ dispose:
     MESSAGE_ERR_D("server worker", "close");
   }
   return;
+}
+
+int apply_filter(filter_t filter, bmp_mapped_image_t *img) {
+  int ret = EXIT_SUCCESS;
+  int thread_count = calculate_thread_count(img->file_h->file_size);
+  pthread_t *threads = malloc(sizeof(*threads) * (size_t)thread_count);
+  if (threads == nullptr) {
+    MESSAGE_ERR_D("apply_filter", "malloc");
+    return errno;
+  }
+  thread_filter_args_t *args = malloc(sizeof(*args) * (size_t)thread_count);
+  if (args == NULL) {
+    MESSAGE_ERR_D("apply_filter", "malloc args");
+    free(threads);
+    return errno;
+  }
+  // Calculer la distribution homogène des lignes
+  int32_t height =
+      img->dib_h->height > 0 ? img->dib_h->height : -img->dib_h->height;
+  int32_t *line_distribution =
+      calculate_line_distribution(height, thread_count);
+  if (line_distribution == nullptr) {
+    MESSAGE_ERR_D("apply_filter", "malloc distribution");
+    free(threads);
+    free(args);
+    return errno;
+  }
+
+  switch (filter) {
+  case identity:
+    for (int i = 0; i < thread_count; i++) {
+      args[i].img = img;
+      args[i].start_line = line_distribution[i];
+      args[i].end_line = line_distribution[i + 1];
+      if (pthread_create(&threads[i], NULL, identity_filter, &args[i]) != 0) {
+        MESSAGE_ERR_D("apply_filter", "pthread_create");
+        for (int j = 0; j < i; j++) {
+          pthread_join(threads[j], NULL);
+        }
+        ret = EXIT_FAILURE;
+        goto dispose;
+      }
+    }
+    break;
+  case blanckAndWhite:
+  default:
+    errno = EINVAL;
+    MESSAGE_ERR_D("server worker", "Unsuported filter");
+    ret = errno;
+    goto dispose;
+  }
+  for (int i = 0; i < thread_count; i++) {
+    pthread_join(threads[i], nullptr);
+  }
+dispose:
+  free(line_distribution);
+  free(args);
+  free(threads);
+  return ret;
 }

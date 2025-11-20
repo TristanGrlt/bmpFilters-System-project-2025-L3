@@ -16,7 +16,7 @@
 
 #define MAX_PATH_LENGTH 256
 
-typedef enum { blanckAndWhite } filter_t;
+typedef enum { identity, blanckAndWhite } filter_t;
 
 typedef struct {
   pid_t pid;

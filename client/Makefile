@@ -4,7 +4,7 @@ CFLAGS = -std=c2x -D_XOPEN_SOURCE=500 -Wpedantic -Wall -Wextra -Wconversion -Wer
 
 LDFLAGS = -lm -lrt
 
-TARGET = build/run
+TARGET = build/client_bmp
 
 SRC_LOCAL = $(wildcard src/*.c)
 SHARED_SRC = ../shared/full_io.c
