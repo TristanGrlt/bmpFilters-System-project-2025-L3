@@ -7,6 +7,7 @@
 #include <string.h>
 #include <sys/mman.h>
 #include <sys/wait.h>
+#include <syslog.h>
 #include <unistd.h>
 
 #include "bmp.h"
@@ -14,7 +15,30 @@
 #include "request.h"
 #include "utils.h"
 
+#define PID_FILE "/tmp/bmp_server.pid"
+
 void start_worker(filter_request_t *rq);
+
+//---- [LOG] -----------------------------------------------------------------//
+//----------------------------------------------------------------------------//
+
+#define MESSAGE_ERR_D(prog, func)                                              \
+  {                                                                            \
+    if (!daemon_mode) {                                                        \
+      fprintf(stderr, "%s: %s: %s\n", (prog), (func), strerror(errno));        \
+    } else {                                                                   \
+      syslog(LOG_ERR, "%s: %s: %s", (prog), (func), strerror(errno));          \
+    }                                                                          \
+  }
+
+#define MESSAGE_INFO_D(prog, func)                                             \
+  {                                                                            \
+    if (!daemon_mode) {                                                        \
+      fprintf(stderr, "%s: %s\n", (prog), (func));                             \
+    } else {                                                                   \
+      syslog(LOG_INFO, "%s: %s", (prog), (func));                              \
+    }                                                                          \
+  }
 
 //---- [STOP] ----------------------------------------------------------------//
 //----------------------------------------------------------------------------//
@@ -25,8 +49,69 @@ static sem_t *g_mutex_full = SEM_FAILED;
 void handle_sigint(int sig) {
   (void)sig;
   running = 0;
+
   if (g_mutex_full != SEM_FAILED)
     sem_post(g_mutex_full);
+}
+
+//---- [DEAMON] --------------------------------------------------------------//
+//----------------------------------------------------------------------------//
+
+bool daemon_mode = true;
+
+int write_pid_file(void) {
+  int fd = open(PID_FILE, O_WRONLY | O_CREAT | O_TRUNC, PERMS);
+  if (fd < 0) {
+    return -1;
+  }
+  char pid_str[32];
+  snprintf(pid_str, sizeof(pid_str), "%d\n", getpid());
+  if (write(fd, pid_str, strlen(pid_str)) < 0) {
+    close(fd);
+    return -1;
+  }
+  close(fd);
+  return 0;
+}
+
+int daemonize(void) {
+  int fd;
+  switch (fork()) {
+  case -1:
+    return -1;
+  case 0:
+    break;
+  default:
+    exit(EXIT_SUCCESS);
+  }
+  if (setsid() < 0) {
+    return -1;
+  }
+  switch (fork()) {
+  case -1:
+    return -1;
+  case 0:
+    break;
+  default:
+    exit(EXIT_SUCCESS);
+  }
+  umask(0);
+  if (chdir("/") < 0) {
+    return -1;
+  }
+  close(STDIN_FILENO);
+  close(STDOUT_FILENO);
+  close(STDERR_FILENO);
+  fd = open("/dev/null", O_RDWR);
+  if (fd != -1) {
+    dup2(fd, STDIN_FILENO);
+    dup2(fd, STDOUT_FILENO);
+    dup2(fd, STDERR_FILENO);
+    if (fd > STDERR_FILENO) {
+      close(fd);
+    }
+  }
+  return 0;
 }
 
 //---- [CODE] ----------------------------------------------------------------//
@@ -41,34 +126,63 @@ int main(int argc, char *argv[]) {
   sem_t *mutex_write = SEM_FAILED;
   int fd = -1;
 
+  // PARSE ARGS
+  for (int i = 1; i < argc; i++) {
+    if (strcmp(argv[i], "--foreground") == 0 || strcmp(argv[i], "-f") == 0) {
+      daemon_mode = false;
+    }
+  }
+
+  signal(SIGCHLD, SIG_IGN);
+  signal(SIGHUP, SIG_IGN);
+
+  // DEAMON MODE
+  if (daemon_mode) {
+    openlog("bmp_server", LOG_PID | LOG_CONS, LOG_DAEMON);
+    if (daemonize() < 0) {
+      MESSAGE_ERR_D(argv[0], "daemonize");
+      return EXIT_FAILURE;
+    }
+  }
+
+  MESSAGE_INFO_D(argv[0], "BMP Server starting...");
+
   // SETUP SIGNAL HANDLER
   struct sigaction sa;
   memset(&sa, 0, sizeof(sa));
   sa.sa_handler = handle_sigint;
   sigaction(SIGINT, &sa, nullptr);
 
-  // CLEAN
-  sem_unlink(REQUEST_EMPTY_PATH);
-  sem_unlink(REQUEST_FULL_PATH);
-  sem_unlink(REQUEST_WRITE_PATH);
-  shm_unlink(REQUEST_FIFO_PATH);
-
   // SHM
   fd = shm_open(REQUEST_FIFO_PATH, O_CREAT | O_EXCL | O_RDWR, PERMS);
   if (fd == -1) {
-    MESSAGE_ERR(argv[0], "shm_open");
+    if (errno == EEXIST) {
+      errno = EBUSY;
+      MESSAGE_ERR_D(argv[0], "Server already running");
+      return EXIT_FAILURE;
+    }
+    MESSAGE_ERR_D(argv[0], "shm_open");
     ret = EXIT_FAILURE;
     goto dispose;
   }
+
+  // IF ONLY SERVER RUNING SET PID
+  if (daemon_mode) {
+    if (write_pid_file() < 0) {
+      syslog(LOG_ERR, "Failed to write PID file");
+    }
+  }
+
+  // MAP
   if (ftruncate(fd, (off_t)sizeof(request_t)) == -1) {
-    MESSAGE_ERR(argv[0], "ftruncate");
+    MESSAGE_ERR_D(argv[0], "ftruncate");
     ret = EXIT_FAILURE;
     goto dispose;
   }
   rqs = mmap(nullptr, sizeof(request_t), PROT_READ | PROT_WRITE, MAP_SHARED, fd,
              0);
   if (rqs == MAP_FAILED) {
-    MESSAGE_ERR(argv[0], "mmap");
+    MESSAGE_ERR_D(argv[0], "mmap");
     ret = EXIT_FAILURE;
     goto dispose;
   }
@@ -77,22 +191,24 @@ int main(int argc, char *argv[]) {
   // MUTEX
   if ((mutex_write = sem_open(REQUEST_WRITE_PATH, O_CREAT | O_EXCL, PERMS,
                               1)) == SEM_FAILED) {
-    MESSAGE_ERR(argv[0], "sem_open");
+    MESSAGE_ERR_D(argv[0], "sem_open");
     ret = EXIT_FAILURE;
     goto dispose;
   }
   if ((mutex_empty = sem_open(REQUEST_EMPTY_PATH, O_CREAT | O_EXCL, PERMS,
                               REQUEST_FIFO_SIZE)) == SEM_FAILED) {
-    MESSAGE_ERR(argv[0], "sem_open");
+    MESSAGE_ERR_D(argv[0], "sem_open");
     ret = EXIT_FAILURE;
     goto dispose;
   }
   if ((mutex_full = sem_open(REQUEST_FULL_PATH, O_CREAT | O_EXCL, PERMS, 0)) ==
       SEM_FAILED) {
-    MESSAGE_ERR(argv[0], "sem_open");
+    MESSAGE_ERR_D(argv[0], "sem_open");
     ret = EXIT_FAILURE;
     goto dispose;
   }
+
+  MESSAGE_INFO_D(argv[0], "BMP Server is runing");
 
   // READ REQUEST
   g_mutex_full = mutex_full;
@@ -107,59 +223,63 @@ int main(int argc, char *argv[]) {
     V(mutex_empty);
     switch (fork()) {
     case -1:
-      MESSAGE_ERR(argv[0], "fork");
+      MESSAGE_ERR_D(argv[0], "fork");
       ret = EXIT_FAILURE;
       running = 0;
       break;
     case 0:
-      printf("Processing new request from pid:%d client\n", rq.pid);
+      MESSAGE_INFO_D(argv[0], "Processing new request");
       start_worker(&rq);
-      printf("Process ended for request from pid:%d client\n", rq.pid);
+      MESSAGE_INFO_D(argv[0], "Process ended for request from pid:%d client\n");
       exit(EXIT_SUCCESS);
     default:
-      waitpid(-1, NULL, WNOHANG);
+      // waitpid(-1, NULL, WNOHANG);
       break;
     }
   }
-  printf("\nServer is shuting down...\n");
+  MESSAGE_INFO_D(argv[0], "Server is shuting down...");
 dispose:
   if (rqs != MAP_FAILED && munmap(rqs, sizeof(request_t)) == -1) {
-    MESSAGE_ERR(argv[0], "munmap");
+    MESSAGE_ERR_D(argv[0], "munmap");
     ret = EXIT_FAILURE;
   }
   if (fd != -1 && close(fd) == -1) {
-    MESSAGE_ERR(argv[0], "close");
+    MESSAGE_ERR_D(argv[0], "close");
     ret = EXIT_FAILURE;
   }
   if (shm_unlink(REQUEST_FIFO_PATH) == -1) {
-    MESSAGE_ERR(argv[0], "shm_unlink");
+    MESSAGE_ERR_D(argv[0], "shm_unlink");
     ret = EXIT_FAILURE;
   }
   if (mutex_write != SEM_FAILED && sem_close(mutex_write) == -1) {
-    MESSAGE_ERR(argv[0], "sem_close");
+    MESSAGE_ERR_D(argv[0], "sem_close");
     ret = EXIT_FAILURE;
   }
   if (mutex_empty != SEM_FAILED && sem_close(mutex_empty) == -1) {
-    MESSAGE_ERR(argv[0], "sem_close");
+    MESSAGE_ERR_D(argv[0], "sem_close");
     ret = EXIT_FAILURE;
   }
   if (mutex_full != SEM_FAILED && sem_close(mutex_full) == -1) {
-    MESSAGE_ERR(argv[0], "sem_close");
+    MESSAGE_ERR_D(argv[0], "sem_close");
     ret = EXIT_FAILURE;
   }
   if (sem_unlink(REQUEST_EMPTY_PATH) == -1) {
-    MESSAGE_ERR(argv[0], "sem_unlink");
+    MESSAGE_ERR_D(argv[0], "sem_unlink");
     ret = EXIT_FAILURE;
   }
   if (sem_unlink(REQUEST_FULL_PATH) == -1) {
-    MESSAGE_ERR(argv[0], "sem_unlink");
+    MESSAGE_ERR_D(argv[0], "sem_unlink");
     ret = EXIT_FAILURE;
   }
   if (sem_unlink(REQUEST_WRITE_PATH) == -1) {
-    MESSAGE_ERR(argv[0], "sem_unlink");
+    MESSAGE_ERR_D(argv[0], "sem_unlink");
     ret = EXIT_FAILURE;
   }
-  printf("Server is shut down !\n");
+  unlink(PID_FILE);
+  MESSAGE_INFO_D(argv[0], "Server is shut down !");
+  if (daemon_mode) {
+    closelog();
+  }
   return ret;
 }
 
@@ -177,20 +297,20 @@ void start_worker(filter_request_t *rq) {
   snprintf(fifo_path, sizeof(fifo_path), "%s%d", FIFO_RESPONSE_BASE_PATH,
            rq->pid);
   if ((fifo = open(fifo_path, O_WRONLY)) == -1) {
-    MESSAGE_ERR("server worker", "open");
+    MESSAGE_ERR_D("server worker", "open");
     ret = errno;
     goto dispose;
   }
 
   // CHECK VALIDE IMAGE SIZE
   if (lstat(rq->path, &s) != 0) {
-    MESSAGE_ERR("server worker", rq->path);
+    MESSAGE_ERR_D("server worker", rq->path);
     ret = errno;
     goto dispose;
   }
   if (s.st_size > MAX_SIZE_FILE) {
     errno = EFBIG;
-    MESSAGE_ERR("server worker", rq->path);
+    MESSAGE_ERR_D("server worker", rq->path);
     ret = errno;
     goto dispose;
   }
@@ -198,7 +318,7 @@ void start_worker(filter_request_t *rq) {
   // OPEN IMAGE FILE
   fd = open(rq->path, O_RDONLY);
   if (fd == -1) {
-    MESSAGE_ERR("server worker", "open");
+    MESSAGE_ERR_D("server worker", "open");
     ret = errno;
     goto dispose;
   }
@@ -206,7 +326,7 @@ void start_worker(filter_request_t *rq) {
   // MAP
   mapped_data = mmap(NULL, (size_t)s.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
   if (mapped_data == MAP_FAILED) {
-    MESSAGE_ERR("server worker", "mmap");
+    MESSAGE_ERR_D("server worker", "mmap");
     ret = errno;
     goto dispose;
   }
@@ -214,7 +334,7 @@ void start_worker(filter_request_t *rq) {
   // CHECK FILE TYPE VALIDITY
   if (img.file_h->signature != BMP_SIGNATURE) {
     errno = EINVAL;
-    MESSAGE_ERR("server worker", rq->path);
+    MESSAGE_ERR_D("server worker", rq->path);
     ret = errno;
     goto dispose;
   }
@@ -222,16 +342,16 @@ void start_worker(filter_request_t *rq) {
       (bmp_dib_header_t *)((char *)mapped_data + sizeof(bmp_file_header_t));
   img.pixels = (u_int8_t *)mapped_data + img.file_h->pixel_array_offset;
 
-  printf("\tWidth: %d, Height: %u\n", img.dib_h->width, img.dib_h->height);
+  // printf("\tWidth: %d, Height: %u\n", img.dib_h->width, img.dib_h->height);
 
 dispose:
   if (fd != -1 && close(fd) == -1) {
-    MESSAGE_ERR("server worker", "close");
+    MESSAGE_ERR_D("server worker", "close");
     ret = EXIT_FAILURE;
   }
   if (mapped_data != MAP_FAILED) {
     if (munmap(mapped_data, (size_t)s.st_size) == -1) {
-      MESSAGE_ERR("server worker", "munmap");
+      MESSAGE_ERR_D("server worker", "munmap");
       ret = EXIT_FAILURE;
     }
   }
@@ -239,7 +359,7 @@ dispose:
     full_write(fifo, &ret, sizeof(ret));
   }
   if (fifo != -1 && close(fifo) == -1) {
-    MESSAGE_ERR("server worker", "close");
+    MESSAGE_ERR_D("server worker", "close");
   }
   return;
 }
