@@ -348,9 +348,7 @@ void start_worker(filter_request_t *rq) {
     goto dispose;
   }
   if (s.st_size > MAX_SIZE_FILE) {
-    errno = EFBIG;
-    MESSAGE_ERR_D("server worker", rq->path);
-    ret = errno;
+    ret = EFBIG;
     goto dispose;
   }
 
@@ -362,19 +360,19 @@ void start_worker(filter_request_t *rq) {
     goto dispose;
   }
 
-  // MAP
-  mapped_data = mmap(NULL, (size_t)s.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
+  mapped_data =
+      mmap(NULL, (size_t)s.st_size, PROT_READ | PROT_WRITE, MAP_PRIVATE, fd, 0);
   if (mapped_data == MAP_FAILED) {
     MESSAGE_ERR_D("server worker", "mmap");
     ret = errno;
     goto dispose;
   }
+
   img.file_h = (bmp_file_header_t *)mapped_data;
+
   // CHECK FILE TYPE VALIDITY
   if (img.file_h->signature != BMP_SIGNATURE) {
-    errno = EINVAL;
-    MESSAGE_ERR_D("server worker", rq->path);
-    ret = errno;
+    ret = EINVAL;
     goto dispose;
   }
   img.dib_h =
@@ -420,10 +418,13 @@ dispose:
     }
   }
   if (fifo != -1) {
-    full_write(fifo, &ret, sizeof(ret));
+    if (full_write(fifo, &ret, sizeof(ret)) == -1) {
+      MESSAGE_ERR_D("server worker", "full_write");
+    }
   }
   if (fifo != -1 && close(fifo) == -1) {
     MESSAGE_ERR_D("server worker", "close");
+    ret = EXIT_FAILURE;
   }
   return;
 }
@@ -442,7 +443,6 @@ int apply_filter(filter_t filter, bmp_mapped_image_t *img) {
     free(threads);
     return errno;
   }
-  // Calculer la distribution homogène des lignes
   int32_t height =
       img->dib_h->height > 0 ? img->dib_h->height : -img->dib_h->height;
   int32_t *line_distribution =
@@ -471,6 +471,21 @@ int apply_filter(filter_t filter, bmp_mapped_image_t *img) {
     }
     break;
   case blanckAndWhite:
+    for (int i = 0; i < thread_count; i++) {
+      args[i].img = img;
+      args[i].start_line = line_distribution[i];
+      args[i].end_line = line_distribution[i + 1];
+      if (pthread_create(&threads[i], NULL, blackAndWhite_filter, &args[i]) !=
+          0) {
+        MESSAGE_ERR_D("apply_filter", "pthread_create");
+        for (int j = 0; j < i; j++) {
+          pthread_join(threads[j], NULL);
+        }
+        ret = EXIT_FAILURE;
+        goto dispose;
+      }
+    }
+    break;
   default:
     errno = EINVAL;
     MESSAGE_ERR_D("server worker", "Unsuported filter");

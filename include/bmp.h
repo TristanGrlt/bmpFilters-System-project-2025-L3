@@ -43,4 +43,6 @@ typedef struct {
 
 void *identity_filter(void *arg);
 
+void *blackAndWhite_filter(void *arg);
+
 #endif
