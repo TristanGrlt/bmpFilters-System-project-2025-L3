@@ -7,9 +7,9 @@ LDFLAGS = -lm -lrt
 TARGET = build/client_bmp
 
 SRC_LOCAL = $(wildcard src/*.c)
-SHARED_SRC = ../shared/full_io.c
+SHARED_SRC = $(wildcard ../shared/*.c)
 
-OBJ = $(SRC_LOCAL:src/%.c=build/%.o) build/full_io.o
+OBJ = $(SRC_LOCAL:src/%.c=build/%.o) $(SHARED_SRC:../shared/%.c=build/%.o)
 
 DEP = $(OBJ:.o=.d)
 
@@ -21,7 +21,7 @@ $(TARGET): $(OBJ)
 build/%.o: src/%.c | build
 	$(CC) -c $< -o $@ $(CFLAGS)
 
-build/full_io.o: $(SHARED_SRC) | build
+build/%.o: ../shared/%.c | build
 	$(CC) -c $< -o $@ $(CFLAGS)
 
 build:

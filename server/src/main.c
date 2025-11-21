@@ -14,13 +14,21 @@
 
 #include "bmp.h"
 #include "full_io.h"
-#include "request.h"
 #include "utils.h"
 
 #define PID_FILE "/tmp/bmp_server.pid"
 
 #define MIN_THREAD 4
 #define MAX_THREAD 8
+
+//---- [FILTERS] -------------------------------------------------------------//
+//----------------------------------------------------------------------------//
+
+#include "filters.h"
+#include "opt_to_request.h"
+
+//---- [LOCAL FUNC] ----------------------------------------------------------//
+//----------------------------------------------------------------------------//
 
 void start_worker(filter_request_t *rq);
 
@@ -360,8 +368,8 @@ void start_worker(filter_request_t *rq) {
     goto dispose;
   }
 
-  mapped_data =
-      mmap(NULL, (size_t)s.st_size, PROT_READ | PROT_WRITE, MAP_PRIVATE, fd, 0);
+  mapped_data = mmap(nullptr, (size_t)s.st_size, PROT_READ | PROT_WRITE,
+                     MAP_PRIVATE, fd, 0);
   if (mapped_data == MAP_FAILED) {
     MESSAGE_ERR_D("server worker", "mmap");
     ret = errno;
@@ -454,47 +462,46 @@ int apply_filter(filter_t filter, bmp_mapped_image_t *img) {
     return errno;
   }
 
+  // Déterminer la fonction de filtre à utiliser
+  void *(*filter_func)(void *) = NULL;
+
   switch (filter) {
-  case identity:
-    for (int i = 0; i < thread_count; i++) {
-      args[i].img = img;
-      args[i].start_line = line_distribution[i];
-      args[i].end_line = line_distribution[i + 1];
-      if (pthread_create(&threads[i], NULL, identity_filter, &args[i]) != 0) {
-        MESSAGE_ERR_D("apply_filter", "pthread_create");
-        for (int j = 0; j < i; j++) {
-          pthread_join(threads[j], NULL);
-        }
-        ret = EXIT_FAILURE;
-        goto dispose;
-      }
-    }
+#define OPT_TO_REQUEST_SIMPLE_FILTER(filter_name, short_flag, long_flag,       \
+                                     description, filter_func_ptr)             \
+  case filter_name:                                                            \
+    filter_func = filter_func_ptr;                                             \
     break;
-  case blanckAndWhite:
-    for (int i = 0; i < thread_count; i++) {
-      args[i].img = img;
-      args[i].start_line = line_distribution[i];
-      args[i].end_line = line_distribution[i + 1];
-      if (pthread_create(&threads[i], NULL, blackAndWhite_filter, &args[i]) !=
-          0) {
-        MESSAGE_ERR_D("apply_filter", "pthread_create");
-        for (int j = 0; j < i; j++) {
-          pthread_join(threads[j], NULL);
-        }
-        ret = EXIT_FAILURE;
-        goto dispose;
-      }
-    }
-    break;
+#ifdef OPT_TO_REQUEST_SIMPLE_FILTERS
+    OPT_TO_REQUEST_SIMPLE_FILTERS
+#endif
+#undef OPT_TO_REQUEST_SIMPLE_FILTER
   default:
     errno = EINVAL;
     MESSAGE_ERR_D("server worker", "Unsuported filter");
     ret = errno;
     goto dispose;
   }
+
+  // Créer les threads (une seule fois)
+  for (int i = 0; i < thread_count; i++) {
+    args[i].img = img;
+    args[i].start_line = line_distribution[i];
+    args[i].end_line = line_distribution[i + 1];
+    if (pthread_create(&threads[i], NULL, filter_func, &args[i]) != 0) {
+      MESSAGE_ERR_D("apply_filter", "pthread_create");
+      for (int j = 0; j < i; j++) {
+        pthread_join(threads[j], NULL);
+      }
+      ret = EXIT_FAILURE;
+      goto dispose;
+    }
+  }
+
+  // Attendre tous les threads
   for (int i = 0; i < thread_count; i++) {
     pthread_join(threads[i], nullptr);
   }
+
 dispose:
   free(line_distribution);
   free(args);

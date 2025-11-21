@@ -42,3 +42,6 @@ core.*
 
 # Dependencies
 *.depend
+
+#image files
+*.bmp

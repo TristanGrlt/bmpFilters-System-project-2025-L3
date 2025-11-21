@@ -10,27 +10,13 @@
 #include <unistd.h>
 
 #include "full_io.h"
-#include "request.h"
 #include "utils.h"
 
-//---- [ARGS] ----------------------------------------------------------------//
+//---- [FILTERS] -------------------------------------------------------------//
 //----------------------------------------------------------------------------//
 
-#define REQUIRED_ARG_COUNT 2
-
-#define SIMPLEARGS_REQUIRED_ARGS                                               \
-  SIMPLEARGS_REQUIRED_STRING_ARG(input_file, "input", "Input image path",      \
-                                 true)                                         \
-  SIMPLEARGS_REQUIRED_STRING_ARG(output_file, "output", "Output image path",   \
-                                 true)
-
-#define SIMPLEARGS_BOOLEAN_ARGS                                                \
-  SIMPLEARGS_BOOLEAN_ARG(b_and_w, "b&w", "blackAndWhite",                      \
-                         "Apply a black and white filter to the image")        \
-  SIMPLEARGS_BOOLEAN_ARG(identity, "id", "identity",                           \
-                         "Apply no filter to the image")
-
-#include "simpleargs.h"
+#include "filters.h"
+#include "opt_to_request.h"
 
 //---- [CODE] ----------------------------------------------------------------//
 //----------------------------------------------------------------------------//
@@ -48,27 +34,16 @@ int main(int argc, char *argv[]) {
   fifo_path[0] = '\0';
 
   // PARSE ARGS
-  if (argc < 4) {
-    ERROR_MESSAGE(EXE(argv[0]), SIMPLEARGS_ERR_MISSING_ARGS, REQUIRED_ARG_COUNT,
-                  argc - 1);
-    easyargs_print_help(argv[0]);
-    return EXIT_FAILURE;
-  }
-  simpleargs_args_t args = easyargs_make_default_args();
-  if (!easyargs_parse_args(argc, argv, &args)) {
+  arguments_t args;
+  if (process_options_to_request(argc, argv, &args) != EXIT_SUCCESS) {
     return EXIT_FAILURE;
   }
 
   // CREATE REQUEST
   rq.pid = getpid();
-  strncpy(rq.path, args.input_file, MAX_PATH_LENGTH - 1);
+  strncpy(rq.path, args.input, MAX_PATH_LENGTH - 1);
   rq.path[MAX_PATH_LENGTH - 1] = '\0';
-  if (args.b_and_w) {
-    rq.filter = blanckAndWhite;
-  }
-  if (args.identity) {
-    rq.filter = identity;
-  }
+  rq.filter = args.filter;
 
   // MUTEX
   if ((mutex_empty = sem_open(REQUEST_EMPTY_PATH, 0)) == SEM_FAILED) {
@@ -142,7 +117,7 @@ int main(int argc, char *argv[]) {
   }
 
   // READ IMAGE BACK
-  int fd_out = open(args.output_file, O_WRONLY | O_CREAT | O_TRUNC, PERMS);
+  int fd_out = open(args.output, O_WRONLY | O_CREAT | O_TRUNC, PERMS);
   if (fd_out == -1) {
     MESSAGE_ERR(argv[0], "open output file");
     ret = EXIT_FAILURE;
@@ -150,7 +125,7 @@ int main(int argc, char *argv[]) {
   }
 
   struct stat s;
-  if (stat(args.input_file, &s) != 0) {
+  if (stat(args.input, &s) != 0) {
     MESSAGE_ERR(argv[0], "stat");
     close(fd_out);
     ret = EXIT_FAILURE;
