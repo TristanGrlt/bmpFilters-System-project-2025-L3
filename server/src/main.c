@@ -440,15 +440,10 @@ dispose:
 int apply_filter(filter_t filter, bmp_mapped_image_t *img) {
   int ret = EXIT_SUCCESS;
   int thread_count = calculate_thread_count(img->file_h->file_size);
-  pthread_t *threads = malloc(sizeof(*threads) * (size_t)thread_count);
-  if (threads == nullptr) {
-    MESSAGE_ERR_D("apply_filter", "malloc");
-    return errno;
-  }
+  pthread_t threads[MAX_THREAD];
   thread_filter_args_t *args = malloc(sizeof(*args) * (size_t)thread_count);
   if (args == NULL) {
     MESSAGE_ERR_D("apply_filter", "malloc args");
-    free(threads);
     return errno;
   }
   int32_t height =
@@ -457,7 +452,6 @@ int apply_filter(filter_t filter, bmp_mapped_image_t *img) {
       calculate_line_distribution(height, thread_count);
   if (line_distribution == nullptr) {
     MESSAGE_ERR_D("apply_filter", "malloc distribution");
-    free(threads);
     free(args);
     return errno;
   }
@@ -505,6 +499,5 @@ int apply_filter(filter_t filter, bmp_mapped_image_t *img) {
 dispose:
   free(line_distribution);
   free(args);
-  free(threads);
   return ret;
 }
