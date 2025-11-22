@@ -191,7 +191,7 @@ int main(int argc, char *argv[]) {
   if (config_load(&g_config, CONFIG_FILE_PATH_LOCAL) < 0) {
     // SYS
     if (config_load(&g_config, CONFIG_FILE_PATH_SYSTEM) < 0) {
-      MESSAGE_INFO_D(argv[0], "No config could not be load, using defaults");
+      MESSAGE_INFO_D(argv[0], "No config could be load, using defaults");
     } else {
       MESSAGE_INFO_D(argv[0], "Config loaded from system path");
     }
