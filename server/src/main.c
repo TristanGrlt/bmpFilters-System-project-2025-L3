@@ -13,13 +13,11 @@
 #include <unistd.h>
 
 #include "bmp.h"
+#include "config.h"
 #include "full_io.h"
 #include "utils.h"
 
 #define PID_FILE "/tmp/bmp_server.pid"
-
-#define MIN_THREAD 4
-#define MAX_THREAD 8
 
 //---- [FILTERS] -------------------------------------------------------------//
 //----------------------------------------------------------------------------//
@@ -65,6 +63,31 @@ void handle_sigint(int sig) {
 
   if (g_mutex_full != SEM_FAILED)
     sem_post(g_mutex_full);
+}
+
+//---- [CONFIG] --------------------------------------------------------------//
+//----------------------------------------------------------------------------//
+
+static server_config_t g_config;
+static sem_t *g_config_mutex = SEM_FAILED;
+
+void handle_sighup(int sig) {
+  (void)sig;
+
+  P(g_config_mutex);
+  // LOCAL
+  if (config_load(&g_config, CONFIG_FILE_PATH_LOCAL) < 0) {
+    // SYS
+    if (config_load(&g_config, CONFIG_FILE_PATH_SYSTEM) < 0) {
+      syslog(LOG_WARNING, "Failed to reload config, keeping current settings");
+    } else {
+      syslog(LOG_INFO, "Configuration reloaded from %s",
+             CONFIG_FILE_PATH_SYSTEM);
+    }
+  } else {
+    syslog(LOG_INFO, "Configuration reloaded from %s", CONFIG_FILE_PATH_LOCAL);
+  }
+  V(g_config_mutex);
 }
 
 //---- [DEAMON] --------------------------------------------------------------//
@@ -129,6 +152,7 @@ int daemonize(void) {
 
 //---- [MAIN] ----------------------------------------------------------------//
 //----------------------------------------------------------------------------//
+//----------------------------------------------------------------------------//
 
 int main(int argc, char *argv[]) {
   (void)argc;
@@ -139,17 +163,16 @@ int main(int argc, char *argv[]) {
   sem_t *mutex_write = SEM_FAILED;
   int fd = -1;
 
-  // PARSE ARGS
+  signal(SIGCHLD, SIG_IGN);
+
+  //---- [PARSE ARGS        ] ------------------------------------------------//
   for (int i = 1; i < argc; i++) {
     if (strcmp(argv[i], "--foreground") == 0 || strcmp(argv[i], "-f") == 0) {
       daemon_mode = false;
     }
   }
 
-  signal(SIGCHLD, SIG_IGN);
-  signal(SIGHUP, SIG_IGN);
-
-  // DEAMON MODE
+  //---- [DEAMON MODE       ] ------------------------------------------------//
   if (daemon_mode) {
     openlog("bmp_server", LOG_PID | LOG_CONS, LOG_DAEMON);
     if (daemonize() < 0) {
@@ -160,13 +183,39 @@ int main(int argc, char *argv[]) {
 
   MESSAGE_INFO_D(argv[0], "BMP Server starting...");
 
-  // SETUP SIGNAL HANDLER
+  //---- [LOAD CONFIG      ] ------------------------------------------------//
+  config_init_default(&g_config);
+  // LOCAL
+  if (config_load(&g_config, CONFIG_FILE_PATH_LOCAL) < 0) {
+    // SYS
+    if (config_load(&g_config, CONFIG_FILE_PATH_SYSTEM) < 0) {
+      MESSAGE_INFO_D(argv[0], "No config file found, using defaults");
+    } else {
+      MESSAGE_INFO_D(argv[0], "Config loaded from system path");
+    }
+  } else {
+    MESSAGE_INFO_D(argv[0], "Config loaded from local path");
+  }
+  // MUTEX CONFIG
+  g_config_mutex = sem_open("/bmp_config_mutex", O_CREAT | O_EXCL, PERMS, 1);
+  if (g_config_mutex == SEM_FAILED) {
+    MESSAGE_ERR_D(argv[0], "sem_open config_mutex");
+    ret = EXIT_FAILURE;
+    goto dispose;
+  }
+
+  //---- [SIGNAL HANDLER    ] ------------------------------------------------//
   struct sigaction sa;
   memset(&sa, 0, sizeof(sa));
   sa.sa_handler = handle_sigint;
   sigaction(SIGINT, &sa, nullptr);
 
-  // SHM
+  struct sigaction sa_hup;
+  memset(&sa_hup, 0, sizeof(sa_hup));
+  sa_hup.sa_handler = handle_sighup;
+  sigaction(SIGHUP, &sa_hup, nullptr);
+
+  //---- [SHM               ] ------------------------------------------------//
   fd = shm_open(REQUEST_FIFO_PATH, O_CREAT | O_EXCL | O_RDWR, PERMS);
   if (fd == -1) {
     if (errno == EEXIST) {
@@ -179,14 +228,14 @@ int main(int argc, char *argv[]) {
     goto dispose;
   }
 
-  // IF ONLY SERVER RUNING SET PID
+  //---- [PID FILE          ] ------------------------------------------------//
   if (daemon_mode) {
     if (write_pid_file() < 0) {
       syslog(LOG_ERR, "Failed to write PID file");
     }
   }
 
-  // MAP
+  //---- [MAP               ] ------------------------------------------------//
   if (ftruncate(fd, (off_t)sizeof(request_t)) == -1) {
     MESSAGE_ERR_D(argv[0], "ftruncate");
     ret = EXIT_FAILURE;
@@ -201,7 +250,7 @@ int main(int argc, char *argv[]) {
   }
   rqs->write = 0;
 
-  // MUTEX
+  //---- [MUTEX             ] ------------------------------------------------//
   if ((mutex_write = sem_open(REQUEST_WRITE_PATH, O_CREAT | O_EXCL, PERMS,
                               1)) == SEM_FAILED) {
     MESSAGE_ERR_D(argv[0], "sem_open");
@@ -223,7 +272,7 @@ int main(int argc, char *argv[]) {
 
   MESSAGE_INFO_D(argv[0], "BMP Server is runing");
 
-  // READ REQUEST
+  //---- [READ REQUEST      ] ------------------------------------------------//
   g_mutex_full = mutex_full;
   int rd = 0;
   while (running) {
@@ -246,7 +295,6 @@ int main(int argc, char *argv[]) {
       MESSAGE_INFO_D(argv[0], "Processing ended for a request");
       exit(EXIT_SUCCESS);
     default:
-      // waitpid(-1, NULL, WNOHANG);
       break;
     }
   }
@@ -276,6 +324,10 @@ dispose:
     MESSAGE_ERR_D(argv[0], "sem_close");
     ret = EXIT_FAILURE;
   }
+  if (g_config_mutex != SEM_FAILED && sem_close(g_config_mutex) == -1) {
+    MESSAGE_ERR_D(argv[0], "sem_close config_mutex");
+    ret = EXIT_FAILURE;
+  }
   if (sem_unlink(REQUEST_EMPTY_PATH) == -1) {
     MESSAGE_ERR_D(argv[0], "sem_unlink");
     ret = EXIT_FAILURE;
@@ -288,6 +340,10 @@ dispose:
     MESSAGE_ERR_D(argv[0], "sem_unlink");
     ret = EXIT_FAILURE;
   }
+  if (sem_unlink("/bmp_config_mutex") == -1) {
+    MESSAGE_ERR_D(argv[0], "sem_unlink config_mutex");
+    ret = EXIT_FAILURE;
+  }
   unlink(PID_FILE);
   MESSAGE_INFO_D(argv[0], "Server is shut down !");
   if (daemon_mode) {
@@ -298,23 +354,24 @@ dispose:
 
 //---- [WORKER] --------------------------------------------------------------//
 //----------------------------------------------------------------------------//
+//----------------------------------------------------------------------------//
 
+// apply_filter: apply filter to the image pointed by img
 int apply_filter(filter_t filter, bmp_mapped_image_t *img);
 
+// calculate_thread_count: Computes the optimal number of thread depending of
+// the min and max thread limits define in the config file.
 int calculate_thread_count(off_t file_size) {
-  int thread_count =
-      MIN_THREAD +
-      (int)((file_size * (MAX_THREAD - MIN_THREAD)) / MAX_SIZE_FILE);
-  if (thread_count < MIN_THREAD)
-    thread_count = MIN_THREAD;
-  if (thread_count > MAX_THREAD)
-    thread_count = MAX_THREAD;
-  return thread_count;
+  P(g_config_mutex);
+  int count = config_get_thread_count(&g_config, file_size);
+  V(g_config_mutex);
+  return count;
 }
 
-// Calcule la répartition homogène des lignes entre les threads
-// Retourne un tableau de (thread_count + 1) éléments contenant les indices de
-// début/fin Exemple: height=14, threads=3 -> [0, 5, 10, 14] (tailles: 5, 5, 4)
+// calculate_line_distribution: Computes the even distribution of lines
+// among threads. Returns an array of (thread_count + 1) elements
+// containing the start/end indices.
+// Example: height=14, threads=3 -> [0, 5, 10, 14] (sizes: 5, 5, 4)
 int32_t *calculate_line_distribution(int32_t height, int thread_count) {
   int32_t *distribution = malloc(sizeof(int32_t) * (size_t)(thread_count + 1));
   if (distribution == nullptr) {
@@ -340,7 +397,7 @@ void start_worker(filter_request_t *rq) {
   void *mapped_data = MAP_FAILED;
   bmp_mapped_image_t img;
 
-  // OPEN FIFO RESPONS
+  //---- [OPEN FIFO RESPONS ] ------------------------------------------------//
   snprintf(fifo_path, sizeof(fifo_path), "%s%d", FIFO_RESPONSE_BASE_PATH,
            rq->pid);
   if ((fifo = open(fifo_path, O_WRONLY)) == -1) {
@@ -349,7 +406,7 @@ void start_worker(filter_request_t *rq) {
     goto dispose;
   }
 
-  // CHECK VALIDE IMAGE SIZE
+  //---- [CHECK IMAGE SIZE  ] ------------------------------------------------//
   if (lstat(rq->path, &s) != 0) {
     MESSAGE_ERR_D("server worker", rq->path);
     ret = errno;
@@ -360,14 +417,13 @@ void start_worker(filter_request_t *rq) {
     goto dispose;
   }
 
-  // OPEN IMAGE FILE
+  //---- [OPEN IMAGE FILE   ] ------------------------------------------------//
   fd = open(rq->path, O_RDONLY);
   if (fd == -1) {
     MESSAGE_ERR_D("server worker", "open");
     ret = errno;
     goto dispose;
   }
-
   mapped_data = mmap(nullptr, (size_t)s.st_size, PROT_READ | PROT_WRITE,
                      MAP_PRIVATE, fd, 0);
   if (mapped_data == MAP_FAILED) {
@@ -375,10 +431,9 @@ void start_worker(filter_request_t *rq) {
     ret = errno;
     goto dispose;
   }
-
   img.file_h = (bmp_file_header_t *)mapped_data;
 
-  // CHECK FILE TYPE VALIDITY
+  //---- [CHECK TYPE VALIDITY] -----------------------------------------------//
   if (img.file_h->signature != BMP_SIGNATURE) {
     ret = EINVAL;
     goto dispose;
@@ -391,7 +446,7 @@ void start_worker(filter_request_t *rq) {
     goto dispose;
   }
 
-  // SEND IMAGE BACK
+  //---- [SEND IMAGE BACK   ] ------------------------------------------------//
   if (full_write(fifo, &ret, sizeof(ret)) == -1) {
     MESSAGE_ERR_D("server worker", "full_write");
     ret = errno;
@@ -440,7 +495,8 @@ dispose:
 int apply_filter(filter_t filter, bmp_mapped_image_t *img) {
   int ret = EXIT_SUCCESS;
   int thread_count = calculate_thread_count(img->file_h->file_size);
-  pthread_t threads[MAX_THREAD];
+
+  pthread_t threads[ABSOLUTE_MAX_THREADS];
   thread_filter_args_t *args = malloc(sizeof(*args) * (size_t)thread_count);
   if (args == NULL) {
     MESSAGE_ERR_D("apply_filter", "malloc args");
@@ -456,9 +512,8 @@ int apply_filter(filter_t filter, bmp_mapped_image_t *img) {
     return errno;
   }
 
-  // Déterminer la fonction de filtre à utiliser
+  //---- [SELECT FILTER     ] ------------------------------------------------//
   void *(*filter_func)(void *) = NULL;
-
   switch (filter) {
 #define OPT_TO_REQUEST_SIMPLE_FILTER(filter_name, short_flag, long_flag,       \
                                      description, filter_func_ptr)             \
@@ -476,7 +531,7 @@ int apply_filter(filter_t filter, bmp_mapped_image_t *img) {
     goto dispose;
   }
 
-  // Créer les threads (une seule fois)
+  //---- [THREAD            ] ------------------------------------------------//
   for (int i = 0; i < thread_count; i++) {
     args[i].img = img;
     args[i].start_line = line_distribution[i];
@@ -491,7 +546,7 @@ int apply_filter(filter_t filter, bmp_mapped_image_t *img) {
     }
   }
 
-  // Attendre tous les threads
+  //---- [WAIT              ] ------------------------------------------------//
   for (int i = 0; i < thread_count; i++) {
     pthread_join(threads[i], nullptr);
   }

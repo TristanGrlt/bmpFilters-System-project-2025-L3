@@ -14,7 +14,6 @@
 #define V(sem) sem_post(sem)
 #define P(sem) sem_wait(sem)
 
-#define FIFO_RESPONSE_BASE_PATH                                                \
-  "/tmp/fifo_rep_" // Add the pid of the client at the end
+#define FIFO_RESPONSE_BASE_PATH "/tmp/fifo_rep_" // ajouter le pid à la fin
 
 #endif

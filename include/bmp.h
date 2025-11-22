@@ -41,8 +41,20 @@ typedef struct {
   int32_t end_line;   // (exclusif)
 } thread_filter_args_t;
 
+// identity_filter: Fonction qui prend un parametre de type void *arg pour la
+// compataibilité avec des appels par des threads mais qui attend en réalité un
+// pointeur vers une structure de type thread_filter_args_t afin d'appliqué le
+// filtre "identité" sur l'image en mémoire pointé par img entre les lignes
+// start_Line inclusif et end_line exclusif. Cette fonction modifie l'image
+// pointé par img.
 void *identity_filter(void *arg);
 
+// identity_filter: Fonction qui prend un parametre de type void *arg pour la
+// compataibilité avec des appels par des threads mais qui attend en réalité un
+// pointeur vers une structure de type thread_filter_args_t afin d'appliqué le
+// filtre "noire et blanc" sur l'image en mémoire pointé par img entre les
+// lignes start_Line inclusif et end_line exclusif. Cette fonction modifie
+// l'image pointé par img.
 void *blackAndWhite_filter(void *arg);
 
 #endif

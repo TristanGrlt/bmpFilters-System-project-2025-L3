@@ -16,13 +16,13 @@ int process_options_to_request(int argc, char *argv[], arguments_t *arg) {
         strcmp(argv[i], OPT_TO_REQUEST_LONG_PREFIX OPT_TO_REQUEST_LONG_HELP) ==
             0) {
       print_help(argv[0]);
-      return EXIT_FAILURE;
+      return -1;
     }
   }
 
   if (argc < 4) {
     print_help(argv[0]);
-    return EXIT_FAILURE;
+    return -1;
   }
 
   arg->input = argv[1];
@@ -42,12 +42,12 @@ int process_options_to_request(int argc, char *argv[], arguments_t *arg) {
   else {
     fprintf(stderr, "Error: Unknown filter '%s'\n", argv[3]);
     print_help(argv[0]);
-    return EXIT_FAILURE;
+    return -1;
   }
 #endif
 #undef OPT_TO_REQUEST_SIMPLE_FILTER
 
-  return EXIT_SUCCESS;
+  return 0;
 }
 
 void print_help(const char *exec_name) {
