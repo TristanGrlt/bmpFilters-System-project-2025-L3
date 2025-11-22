@@ -1,6 +1,6 @@
 CC = gcc
 
-CFLAGS = -std=c2x -D_XOPEN_SOURCE=500 -Wpedantic -Wall -Wextra -Wconversion -Werror -fstack-protector-all -fpie -pie -O2 -D_FORTIFY_SOURCE=2 -MMD -I../include -MP
+CFLAGS = -std=c2x -D_XOPEN_SOURCE=501 -Wpedantic -Wall -Wextra -Wconversion -Werror -fstack-protector-all -fpie -pie -O2 -D_FORTIFY_SOURCE=2 -MMD -I../include -MP
 
 LDFLAGS = -lm -lrt
 

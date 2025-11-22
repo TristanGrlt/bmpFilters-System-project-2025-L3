@@ -130,3 +130,20 @@ bool config_validate(server_config_t *config) {
 
   return true;
 }
+
+int config_get_thread_count(const server_config_t *config, off_t file_size) {
+  if (!config->is_valid) {
+    return DEFAULT_MIN_THREADS;
+  }
+  int thread_count =
+      config->min_threads +
+      (int)((file_size * (config->max_threads - config->min_threads)) /
+            MAX_SIZE_FILE);
+  if (thread_count < config->min_threads) {
+    thread_count = config->min_threads;
+  }
+  if (thread_count > config->max_threads) {
+    thread_count = config->max_threads;
+  }
+  return thread_count;
+}

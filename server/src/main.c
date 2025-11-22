@@ -80,13 +80,15 @@ void handle_sighup(int sig) {
     // SYS
     if (config_load(&g_config, CONFIG_FILE_PATH_SYSTEM) < 0) {
       syslog(LOG_WARNING, "Failed to reload config, keeping current settings");
-    } else {
-      syslog(LOG_INFO, "Configuration reloaded from %s",
-             CONFIG_FILE_PATH_SYSTEM);
+      V(g_config_mutex);
+      return;
     }
-  } else {
-    syslog(LOG_INFO, "Configuration reloaded from %s", CONFIG_FILE_PATH_LOCAL);
   }
+  syslog(LOG_INFO, "Config reloaded from %s", CONFIG_FILE_PATH_LOCAL);
+  syslog(LOG_INFO, "max_workers = %d", g_config.max_workers);
+  syslog(LOG_INFO, "min_threads = %d", g_config.min_threads);
+  syslog(LOG_INFO, "max_threads = %d", g_config.max_threads);
+
   V(g_config_mutex);
 }
 
@@ -189,7 +191,7 @@ int main(int argc, char *argv[]) {
   if (config_load(&g_config, CONFIG_FILE_PATH_LOCAL) < 0) {
     // SYS
     if (config_load(&g_config, CONFIG_FILE_PATH_SYSTEM) < 0) {
-      MESSAGE_INFO_D(argv[0], "No config file found, using defaults");
+      MESSAGE_INFO_D(argv[0], "No config could not be load, using defaults");
     } else {
       MESSAGE_INFO_D(argv[0], "Config loaded from system path");
     }
@@ -213,6 +215,7 @@ int main(int argc, char *argv[]) {
   struct sigaction sa_hup;
   memset(&sa_hup, 0, sizeof(sa_hup));
   sa_hup.sa_handler = handle_sighup;
+  sa_hup.sa_flags = SA_RESTART;
   sigaction(SIGHUP, &sa_hup, nullptr);
 
   //---- [SHM               ] ------------------------------------------------//
