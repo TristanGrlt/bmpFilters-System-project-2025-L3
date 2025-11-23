@@ -67,33 +67,6 @@ void handle_sigint(int sig) {
     sem_post(g_mutex_full);
 }
 
-//---- [CONFIG] --------------------------------------------------------------//
-//----------------------------------------------------------------------------//
-
-static server_config_t g_config;
-static sem_t *g_config_mutex = SEM_FAILED;
-
-void handle_sighup(int sig) {
-  (void)sig;
-
-  P(g_config_mutex);
-  // LOCAL
-  if (config_load(&g_config, CONFIG_FILE_PATH_LOCAL) < 0) {
-    // SYS
-    if (config_load(&g_config, CONFIG_FILE_PATH_SYSTEM) < 0) {
-      syslog(LOG_WARNING, "Failed to reload config, keeping current settings");
-      V(g_config_mutex);
-      return;
-    }
-  }
-  syslog(LOG_INFO, "Config reloaded from %s", CONFIG_FILE_PATH_LOCAL);
-  syslog(LOG_INFO, "max_workers = %d", g_config.max_workers);
-  syslog(LOG_INFO, "min_threads = %d", g_config.min_threads);
-  syslog(LOG_INFO, "max_threads = %d", g_config.max_threads);
-
-  V(g_config_mutex);
-}
-
 //---- [SIGCHLD] -------------------------------------------------------------//
 //----------------------------------------------------------------------------//
 
@@ -107,6 +80,44 @@ void handle_sigchld(int sig) {
     }
   }
   errno = saved_errno;
+}
+
+//---- [CONFIG] --------------------------------------------------------------//
+//----------------------------------------------------------------------------//
+
+static server_config_t g_config;
+static sem_t *g_config_mutex = SEM_FAILED;
+
+void handle_sighup(int sig) {
+  (void)sig;
+  P(g_config_mutex);
+  int old_max_worker = g_config.max_workers;
+  // LOCAL
+  if (config_load(&g_config, CONFIG_FILE_PATH_LOCAL) < 0) {
+    // SYS
+    if (config_load(&g_config, CONFIG_FILE_PATH_SYSTEM) < 0) {
+      syslog(LOG_WARNING, "Failed to reload config, keeping current settings");
+      V(g_config_mutex);
+      return;
+    }
+  }
+  // MAX WORKER
+  if (g_config.max_workers < old_max_worker) {
+    for (int k = 0; k < old_max_worker - g_config.max_workers; ++k) {
+      P(g_mutex_worker_count);
+    }
+  } else {
+    for (int k = 0; k < g_config.max_workers - old_max_worker; ++k) {
+      V(g_mutex_worker_count);
+    }
+  }
+
+  syslog(LOG_INFO, "Config reloaded from %s", CONFIG_FILE_PATH_LOCAL);
+  syslog(LOG_INFO, "max_workers = %d", g_config.max_workers);
+  syslog(LOG_INFO, "min_threads = %d", g_config.min_threads);
+  syslog(LOG_INFO, "max_threads = %d", g_config.max_threads);
+
+  V(g_config_mutex);
 }
 
 //---- [DEAMON] --------------------------------------------------------------//
@@ -293,6 +304,8 @@ int main(int argc, char *argv[]) {
     ret = EXIT_FAILURE;
     goto dispose;
   }
+  P(g_config_mutex);
+  sem_unlink(MUTEX_WORKER_COUNT);
   if ((g_mutex_worker_count = sem_open(MUTEX_WORKER_COUNT, O_CREAT | O_EXCL,
                                        PERMS, g_config.max_workers)) ==
       SEM_FAILED) {
@@ -300,6 +313,7 @@ int main(int argc, char *argv[]) {
     ret = EXIT_FAILURE;
     goto dispose;
   }
+  V(g_config_mutex);
 
   MESSAGE_INFO_D(argv[0], "BMP Server is runing");
 
