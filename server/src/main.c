@@ -18,6 +18,8 @@
 #include "utils.h"
 
 #define PID_FILE "/tmp/bmp_server.pid"
+#define MUTEX_WORKER_COUNT "/mutex_worker_count"
+#define MUTEX_CONFIG_BMP "/mutex_bmp_config"
 
 //---- [FILTERS] -------------------------------------------------------------//
 //----------------------------------------------------------------------------//
@@ -90,6 +92,21 @@ void handle_sighup(int sig) {
   syslog(LOG_INFO, "max_threads = %d", g_config.max_threads);
 
   V(g_config_mutex);
+}
+
+//---- [SIGCHLD] -------------------------------------------------------------//
+//----------------------------------------------------------------------------//
+
+static sem_t *g_mutex_worker_count = SEM_FAILED;
+void handle_sigchld(int sig) {
+  (void)sig;
+  int saved_errno = errno;
+  while (waitpid(-1, NULL, WNOHANG) > 0) {
+    if (g_mutex_worker_count != SEM_FAILED) {
+      sem_post(g_mutex_worker_count);
+    }
+  }
+  errno = saved_errno;
 }
 
 //---- [DEAMON] --------------------------------------------------------------//
@@ -165,8 +182,6 @@ int main(int argc, char *argv[]) {
   sem_t *mutex_write = SEM_FAILED;
   int fd = -1;
 
-  signal(SIGCHLD, SIG_IGN);
-
   //---- [PARSE ARGS        ] ------------------------------------------------//
   for (int i = 1; i < argc; i++) {
     if (strcmp(argv[i], "--foreground") == 0 || strcmp(argv[i], "-f") == 0) {
@@ -199,9 +214,9 @@ int main(int argc, char *argv[]) {
     MESSAGE_INFO_D(argv[0], "Config loaded from local path");
   }
   // MUTEX CONFIG
-  g_config_mutex = sem_open("/bmp_config_mutex", O_CREAT | O_EXCL, PERMS, 1);
+  g_config_mutex = sem_open(MUTEX_CONFIG_BMP, O_CREAT | O_EXCL, PERMS, 1);
   if (g_config_mutex == SEM_FAILED) {
-    MESSAGE_ERR_D(argv[0], "sem_open config_mutex");
+    MESSAGE_ERR_D(argv[0], "sem_open");
     ret = EXIT_FAILURE;
     goto dispose;
   }
@@ -217,6 +232,12 @@ int main(int argc, char *argv[]) {
   sa_hup.sa_handler = handle_sighup;
   sa_hup.sa_flags = SA_RESTART;
   sigaction(SIGHUP, &sa_hup, nullptr);
+
+  struct sigaction sa_chld;
+  memset(&sa_chld, 0, sizeof(sa_chld));
+  sa_chld.sa_handler = handle_sigchld;
+  sa_chld.sa_flags = SA_RESTART | SA_NOCLDSTOP;
+  sigaction(SIGCHLD, &sa_chld, nullptr);
 
   //---- [SHM               ] ------------------------------------------------//
   fd = shm_open(REQUEST_FIFO_PATH, O_CREAT | O_EXCL | O_RDWR, PERMS);
@@ -272,6 +293,13 @@ int main(int argc, char *argv[]) {
     ret = EXIT_FAILURE;
     goto dispose;
   }
+  if ((g_mutex_worker_count = sem_open(MUTEX_WORKER_COUNT, O_CREAT | O_EXCL,
+                                       PERMS, g_config.max_workers)) ==
+      SEM_FAILED) {
+    MESSAGE_ERR_D(argv[0], "sem_open");
+    ret = EXIT_FAILURE;
+    goto dispose;
+  }
 
   MESSAGE_INFO_D(argv[0], "BMP Server is runing");
 
@@ -279,6 +307,7 @@ int main(int argc, char *argv[]) {
   g_mutex_full = mutex_full;
   int rd = 0;
   while (running) {
+    P(g_mutex_worker_count);
     P(mutex_full);
     if (!running) {
       break;
@@ -289,6 +318,7 @@ int main(int argc, char *argv[]) {
     switch (fork()) {
     case -1:
       MESSAGE_ERR_D(argv[0], "fork");
+      V(g_mutex_worker_count);
       ret = EXIT_FAILURE;
       running = 0;
       break;
@@ -328,7 +358,12 @@ dispose:
     ret = EXIT_FAILURE;
   }
   if (g_config_mutex != SEM_FAILED && sem_close(g_config_mutex) == -1) {
-    MESSAGE_ERR_D(argv[0], "sem_close config_mutex");
+    MESSAGE_ERR_D(argv[0], "sem_close");
+    ret = EXIT_FAILURE;
+  }
+  if (g_mutex_worker_count != SEM_FAILED &&
+      sem_close(g_mutex_worker_count) == -1) {
+    MESSAGE_ERR_D(argv[0], "sem_close");
     ret = EXIT_FAILURE;
   }
   if (sem_unlink(REQUEST_EMPTY_PATH) == -1) {
@@ -343,8 +378,12 @@ dispose:
     MESSAGE_ERR_D(argv[0], "sem_unlink");
     ret = EXIT_FAILURE;
   }
-  if (sem_unlink("/bmp_config_mutex") == -1) {
-    MESSAGE_ERR_D(argv[0], "sem_unlink config_mutex");
+  if (sem_unlink(MUTEX_WORKER_COUNT) == -1) {
+    MESSAGE_ERR_D(argv[0], "sem_unlink");
+    ret = EXIT_FAILURE;
+  }
+  if (sem_unlink(MUTEX_CONFIG_BMP) == -1) {
+    MESSAGE_ERR_D(argv[0], "sem_unlink");
     ret = EXIT_FAILURE;
   }
   unlink(PID_FILE);
@@ -391,6 +430,7 @@ int32_t *calculate_line_distribution(int32_t height, int thread_count) {
 }
 
 void start_worker(filter_request_t *rq) {
+  // sleep(2);
   int ret = EXIT_SUCCESS;
   struct stat s;
   char fifo_path[256];

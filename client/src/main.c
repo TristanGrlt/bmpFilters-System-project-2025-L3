@@ -84,6 +84,13 @@ int main(int argc, char *argv[]) {
     ret = EXIT_FAILURE;
     goto dispose;
   }
+  // OPEN FIFO
+  snprintf(fifo_path, 255, "%s%d", FIFO_RESPONSE_BASE_PATH, getpid());
+  if (mkfifo(fifo_path, PERMS) == -1) {
+    MESSAGE_ERR(argv[0], "mkfifo");
+    ret = EXIT_FAILURE;
+    goto dispose;
+  }
   // WRITE REQUEST
   P(mutex_empty);
   P(mutex_write);
@@ -92,12 +99,6 @@ int main(int argc, char *argv[]) {
   V(mutex_write);
   V(mutex_full);
   // WAIT RESPONSE
-  snprintf(fifo_path, 255, "%s%d", FIFO_RESPONSE_BASE_PATH, getpid());
-  if (mkfifo(fifo_path, PERMS) == -1) {
-    MESSAGE_ERR(argv[0], "mkfifo");
-    ret = EXIT_FAILURE;
-    goto dispose;
-  }
   fifo = open(fifo_path, O_RDONLY);
   if (fifo == -1) {
     MESSAGE_ERR(argv[0], "open");
