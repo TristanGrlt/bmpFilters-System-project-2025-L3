@@ -20,8 +20,26 @@ kill -SIGINT $(cat /tmp/bmp_server.pid)
 
 `ps aux | grep bmp_server` : voire les server bmp qui run
 
-Méthode 1: Arrêt propre (SIGTERM)
-`kill $(cat /tmp/bmp_server.pid)`
+Arrêt propre (SIGTERM)
 
-Méthode 2: Arrêt forcé (SIGKILL) - pas propre !
-`kill -9 $(cat /tmp/bmp_server.pid)`
+```bash
+kill -SIGINT $(cat /tmp/bmp_server.pid)
+```
+
+Arrêt forcé (SIGKILL) - pas propre !
+
+```bash
+kill -9 $(cat /tmp/bmp_server.pid)
+```
+
+Rafaichissement du fichier de config (SIGHUP)
+
+```bash
+kill -SIGHUP $(cat /tmp/bmp_server.pid)
+```
+
+## voire nombre de worker et de zombie du server deamon en cour
+
+```bash
+watch -n 0.01 "echo 'Workers:' \$(pgrep -P \$(cat /tmp/bmp_server.pid) | wc -l) '| Zombies:' \$(ps --ppid \$(cat /tmp/bmp_server.pid) -o stat= 2>/dev/null | grep -c Z)"
+```

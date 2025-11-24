@@ -41,8 +41,8 @@ int main(int argc, char *argv[]) {
 
   // CREATE REQUEST
   rq.pid = getpid();
-  strncpy(rq.path, args.input, MAX_PATH_LENGTH - 1);
-  rq.path[MAX_PATH_LENGTH - 1] = '\0';
+  strncpy(rq.path, args.input, PATH_MAX - 1);
+  rq.path[PATH_MAX - 1] = '\0';
   rq.filter = args.filter;
 
   // MUTEX

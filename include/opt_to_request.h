@@ -37,7 +37,7 @@
 #include "filters.h"
 
 #define REQUEST_FIFO_SIZE 10
-#define MAX_PATH_LENGTH 256
+#define MAX_PATH_LENGTH 4096
 
 #define REQUEST_FIFO_PATH "/filter_request_fifo"
 #define REQUEST_EMPTY_PATH "/mutex_empty"

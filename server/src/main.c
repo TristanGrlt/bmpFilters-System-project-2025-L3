@@ -20,6 +20,7 @@
 #define PID_FILE "/tmp/bmp_server.pid"
 #define MUTEX_WORKER_COUNT "/mutex_worker_count"
 #define MUTEX_CONFIG_BMP "/mutex_bmp_config"
+#define WRITE_TIMEOUT 5
 
 //---- [FILTERS] -------------------------------------------------------------//
 //----------------------------------------------------------------------------//
@@ -52,6 +53,24 @@ void start_worker(filter_request_t *rq);
       syslog(LOG_INFO, "%s: %s", (prog), (func));                              \
     }                                                                          \
   }
+
+//---- [TIME OUT] ------------------------------------------------------------//
+//----------------------------------------------------------------------------//
+
+void handle_sigalrm(int sig) {
+  (void)sig;
+  syslog(LOG_ERR, "Write operation timed out");
+  exit(EXIT_FAILURE);
+}
+
+static void set_write_timeout(unsigned int seconds) {
+  struct sigaction sa;
+  memset(&sa, 0, sizeof(sa));
+  sa.sa_handler = handle_sigalrm;
+  sa.sa_flags = 0;
+  sigaction(SIGALRM, &sa, NULL);
+  alarm(seconds);
+}
 
 //---- [STOP] ----------------------------------------------------------------//
 //----------------------------------------------------------------------------//
@@ -447,7 +466,7 @@ void start_worker(filter_request_t *rq) {
   // sleep(2);
   int ret = EXIT_SUCCESS;
   struct stat s;
-  char fifo_path[256];
+  char fifo_path[PATH_MAX];
   fifo_path[0] = '\0';
   int fifo = -1;
   int fd = -1;
@@ -504,11 +523,14 @@ void start_worker(filter_request_t *rq) {
   }
 
   //---- [SEND IMAGE BACK   ] ------------------------------------------------//
+
+  set_write_timeout(WRITE_TIMEOUT);
   if (full_write(fifo, &ret, sizeof(ret)) == -1) {
     MESSAGE_ERR_D("server worker", "full_write");
     ret = errno;
     goto dispose;
   }
+  alarm(0);
 
   size_t count = (size_t)s.st_size;
   const char *ptr = (const char *)mapped_data;
@@ -517,16 +539,19 @@ void start_worker(filter_request_t *rq) {
     if (n_w > PIPE_BUF) {
       n_w = PIPE_BUF;
     }
+    set_write_timeout(WRITE_TIMEOUT);
     if (full_write(fifo, ptr, n_w) == -1) {
       MESSAGE_ERR_D("server worker", "full_write");
       ret = errno;
       goto dispose;
     }
+    alarm(0);
     ptr += n_w;
     count -= n_w;
   }
 
 dispose:
+  alarm(0);
   if (fd != -1 && close(fd) == -1) {
     MESSAGE_ERR_D("server worker", "close");
     ret = EXIT_FAILURE;
@@ -537,11 +562,13 @@ dispose:
       ret = EXIT_FAILURE;
     }
   }
+  set_write_timeout(WRITE_TIMEOUT);
   if (fifo != -1) {
     if (full_write(fifo, &ret, sizeof(ret)) == -1) {
       MESSAGE_ERR_D("server worker", "full_write");
     }
   }
+  alarm(0);
   if (fifo != -1 && close(fifo) == -1) {
     MESSAGE_ERR_D("server worker", "close");
     ret = EXIT_FAILURE;
