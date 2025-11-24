@@ -466,7 +466,7 @@ void start_worker(filter_request_t *rq) {
   // sleep(2);
   int ret = EXIT_SUCCESS;
   struct stat s;
-  char fifo_path[PATH_MAX];
+  char fifo_path[255];
   fifo_path[0] = '\0';
   int fifo = -1;
   int fd = -1;

@@ -77,7 +77,7 @@ typedef struct {
 
 typedef struct {
   pid_t pid;
-  char path[MAX_PATH_LENGTH];
+  char path[PATH_MAX];
   filter_t filter;
 } filter_request_t;
 
