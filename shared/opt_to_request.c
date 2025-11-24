@@ -4,9 +4,11 @@
 #include "opt_to_request.h"
 
 #define INPUT_ARG_LABEL "input"
-#define INPUT_ARG_DESCRIPTION "Input image path"
+#define INPUT_ARG_DESCRIPTION                                                  \
+  "Input image path realtive to the root of the system"
 #define OUTPUT_ARG_LABEL "output"
-#define OUTPUT_ARG_DESCRIPTION "Output image path"
+#define OUTPUT_ARG_DESCRIPTION                                                 \
+  "Output image path realative to the current working directory"
 
 int process_options_to_request(int argc, char *argv[], arguments_t *arg) {
   // CHECK FOR HELP IN EACH ARGUMENT
