@@ -42,26 +42,10 @@ typedef struct {
   bmp_mapped_image_t *ref_img;
 } thread_filter_args_t;
 
-// identity_filter: Fonction qui prend un parametre de type void *arg pour la
+// Toutes les fonction suivantes prennent un parametre de type void *arg pour la
 // compataibilité avec des appels par des threads mais qui attend en réalité un
 // pointeur vers une structure de type thread_filter_args_t afin d'appliqué le
-// filtre "identité" sur l'image en mémoire pointé par img entre les lignes
-// start_Line inclusif et end_line exclusif. Cette fonction modifie l'image
-// pointé par img.
-void *identity_filter(void *arg);
-
-// identity_filter: Fonction qui prend un parametre de type void *arg pour la
-// compataibilité avec des appels par des threads mais qui attend en réalité un
-// pointeur vers une structure de type thread_filter_args_t afin d'appliqué le
-// filtre "noire et blanc" sur l'image en mémoire pointé par img entre les
-// lignes start_Line inclusif et end_line exclusif. Cette fonction modifie
-// l'image pointé par img.
-void *blackAndWhite_filter(void *arg);
-
-// blurbox_filter: Fonction qui prend un parametre de type void *arg pour la
-// compataibilité avec des appels par des threads mais qui attend en réalité un
-// pointeur vers une structure de type thread_filter_args_t afin d'appliqué le
-// filtre "flou" sur l'image en mémoire pointé par img entre les
+// filtre spécifié dans leur nom sur l'image en mémoire pointé par img entre les
 // lignes start_Line inclusif et end_line exclusif. Cette fonction modifie
 // l'image pointé par img. Elle utilise l'image pointé par ref_img comme
 // référence pour les valeurs des pixels voisins.
@@ -81,5 +65,22 @@ void *motion_blur_horizontal_filter(void *arg);
 void *motion_blur_vertical_filter(void *arg);
 void *oil_painting_filter(void *arg);
 void *crosshatch_filter(void *arg);
+
+// Toutes les fonction qui prennent un parametre de type void *arg pour la
+// compataibilité avec des appels par des threads mais qui attend en réalité un
+// pointeur vers une structure de type thread_filter_args_t afin d'appliqué le
+// filtre spécifié dans leur nom sur l'image en mémoire pointé par img entre les
+// lignes start_Line inclusif et end_line exclusif. Cette fonction modifie
+// l'image pointé par img.
+void *identity_filter(void *arg);
+void *blackAndWhite_filter(void *arg);
+void *red_filter(void *arg);
+void *green_filter(void *arg);
+void *blue_filter(void *arg);
+void *cyan_filter(void *arg);
+void *magenta_filter(void *arg);
+void *yellow_filter(void *arg);
+void *sepia_filter(void *arg);
+void *invert_filter(void *arg);
 
 #endif

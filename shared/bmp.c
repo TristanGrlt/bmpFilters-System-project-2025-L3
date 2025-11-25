@@ -39,7 +39,7 @@ void *blackAndWhite_filter(void *arg) {
 // MATRICE CONVOLUTION
 typedef struct {
   float *matrix;
-  int32_t size; // 3 5 7
+  int32_t size; // 3 5
 } convolution_matrix_t;
 
 // apply_convolution : applique la matrice de convolution conv au pixel (x, y)
@@ -236,4 +236,139 @@ void *crosshatch_filter(void *arg) {
                           1.0f, 1.0f, 1.0f, 1.0f};
   convolution_matrix_t conv = {.matrix = matrix_data, .size = 3};
   return generic_convolution_filter(arg, &conv);
+}
+
+void *red_filter(void *arg) {
+  thread_filter_args_t *args = (thread_filter_args_t *)arg;
+  bmp_mapped_image_t *img = args->img;
+  int32_t width = img->dib_h->width;
+  int32_t row_size = ((width * 3 + 3) / 4) * 4;
+
+  for (int32_t y = args->start_line; y < args->end_line; y++) {
+    uint8_t *row = (uint8_t *)img->pixels + y * row_size;
+    for (int32_t x = 0; x < width; x++) {
+      row[x * 3] = 0;
+      row[x * 3 + 1] = 0;
+    }
+  }
+  return nullptr;
+}
+
+void *green_filter(void *arg) {
+  thread_filter_args_t *args = (thread_filter_args_t *)arg;
+  bmp_mapped_image_t *img = args->img;
+  int32_t width = img->dib_h->width;
+  int32_t row_size = ((width * 3 + 3) / 4) * 4;
+
+  for (int32_t y = args->start_line; y < args->end_line; y++) {
+    uint8_t *row = (uint8_t *)img->pixels + y * row_size;
+    for (int32_t x = 0; x < width; x++) {
+      row[x * 3] = 0;
+      row[x * 3 + 2] = 0;
+    }
+  }
+  return nullptr;
+}
+
+void *blue_filter(void *arg) {
+  thread_filter_args_t *args = (thread_filter_args_t *)arg;
+  bmp_mapped_image_t *img = args->img;
+  int32_t width = img->dib_h->width;
+  int32_t row_size = ((width * 3 + 3) / 4) * 4;
+
+  for (int32_t y = args->start_line; y < args->end_line; y++) {
+    uint8_t *row = (uint8_t *)img->pixels + y * row_size;
+    for (int32_t x = 0; x < width; x++) {
+      row[x * 3 + 1] = 0;
+      row[x * 3 + 2] = 0;
+    }
+  }
+  return nullptr;
+}
+
+void *cyan_filter(void *arg) {
+  thread_filter_args_t *args = (thread_filter_args_t *)arg;
+  bmp_mapped_image_t *img = args->img;
+  int32_t width = img->dib_h->width;
+  int32_t row_size = ((width * 3 + 3) / 4) * 4;
+
+  for (int32_t y = args->start_line; y < args->end_line; y++) {
+    uint8_t *row = (uint8_t *)img->pixels + y * row_size;
+    for (int32_t x = 0; x < width; x++) {
+      row[x * 3 + 2] = 0;
+    }
+  }
+  return nullptr;
+}
+
+void *magenta_filter(void *arg) {
+  thread_filter_args_t *args = (thread_filter_args_t *)arg;
+  bmp_mapped_image_t *img = args->img;
+  int32_t width = img->dib_h->width;
+  int32_t row_size = ((width * 3 + 3) / 4) * 4;
+
+  for (int32_t y = args->start_line; y < args->end_line; y++) {
+    uint8_t *row = (uint8_t *)img->pixels + y * row_size;
+    for (int32_t x = 0; x < width; x++) {
+      row[x * 3 + 1] = 0;
+    }
+  }
+  return nullptr;
+}
+
+void *yellow_filter(void *arg) {
+  thread_filter_args_t *args = (thread_filter_args_t *)arg;
+  bmp_mapped_image_t *img = args->img;
+  int32_t width = img->dib_h->width;
+  int32_t row_size = ((width * 3 + 3) / 4) * 4;
+
+  for (int32_t y = args->start_line; y < args->end_line; y++) {
+    uint8_t *row = (uint8_t *)img->pixels + y * row_size;
+    for (int32_t x = 0; x < width; x++) {
+      row[x * 3] = 0;
+    }
+  }
+  return nullptr;
+}
+
+void *sepia_filter(void *arg) {
+  thread_filter_args_t *args = (thread_filter_args_t *)arg;
+  bmp_mapped_image_t *img = args->img;
+  int32_t width = img->dib_h->width;
+  int32_t row_size = ((width * 3 + 3) / 4) * 4;
+
+  for (int32_t y = args->start_line; y < args->end_line; y++) {
+    uint8_t *row = (uint8_t *)img->pixels + y * row_size;
+    for (int32_t x = 0; x < width; x++) {
+      uint8_t blue = row[x * 3];
+      uint8_t green = row[x * 3 + 1];
+      uint8_t red = row[x * 3 + 2];
+
+      int32_t new_red = (int32_t)(0.393 * red + 0.769 * green + 0.189 * blue);
+      int32_t new_green = (int32_t)(0.349 * red + 0.686 * green + 0.168 * blue);
+      int32_t new_blue = (int32_t)(0.272 * red + 0.534 * green + 0.131 * blue);
+
+      row[x * 3] = (uint8_t)(new_blue > 255 ? 255 : new_blue);
+      row[x * 3 + 1] = (uint8_t)(new_green > 255 ? 255 : new_green);
+      row[x * 3 + 2] = (uint8_t)(new_red > 255 ? 255 : new_red);
+    }
+  }
+  return nullptr;
+}
+
+void *invert_filter(void *arg) {
+  thread_filter_args_t *args = (thread_filter_args_t *)arg;
+  bmp_mapped_image_t *img = args->img;
+  int32_t width = img->dib_h->width;
+  int32_t row_size = ((width * 3 + 3) / 4) * 4;
+
+  for (int32_t y = args->start_line; y < args->end_line; y++) {
+    uint8_t *row = (uint8_t *)img->pixels + y * row_size;
+    for (int32_t x = 0; x < width; x++) {
+      row[x * 3] = 255 - row[x * 3];
+      row[x * 3 + 1] = 255 - row[x * 3 + 1];
+      row[x * 3 + 2] = 255 - row[x * 3 + 2];
+    }
+  }
+  return nullptr;
 }

@@ -21,7 +21,23 @@
                                identity_filter)                                \
   OPT_TO_REQUEST_SIMPLE_FILTER(blackAndWhite, "bw", "blackAndWhite",           \
                                "Apply a black and white filter to the image",  \
-                               blackAndWhite_filter)
+                               blackAndWhite_filter)                           \
+  OPT_TO_REQUEST_SIMPLE_FILTER(red, "r", "red", "Keep only red channel",       \
+                               red_filter)                                     \
+  OPT_TO_REQUEST_SIMPLE_FILTER(green, "g", "green", "Keep only green channel", \
+                               green_filter)                                   \
+  OPT_TO_REQUEST_SIMPLE_FILTER(blue, "b", "blue", "Keep only blue channel",    \
+                               blue_filter)                                    \
+  OPT_TO_REQUEST_SIMPLE_FILTER(cyan, "c", "cyan", "Keep cyan (blue + green)",  \
+                               cyan_filter)                                    \
+  OPT_TO_REQUEST_SIMPLE_FILTER(magenta, "m", "magenta",                        \
+                               "Keep magenta (red + blue)", magenta_filter)    \
+  OPT_TO_REQUEST_SIMPLE_FILTER(yellow, "y", "yellow",                          \
+                               "Keep yellow (red + green)", yellow_filter)     \
+  OPT_TO_REQUEST_SIMPLE_FILTER(sepia, "sep", "sepia",                          \
+                               "Apply sepia tone effect", sepia_filter)        \
+  OPT_TO_REQUEST_SIMPLE_FILTER(invert, "inv", "invert",                        \
+                               "Invert all colors (negative)", invert_filter)
 
 #define OPT_TO_REQUEST_COMPLEX_FILTERS                                         \
   OPT_TO_REQUEST_COMPLEX_FILTER(                                               \
