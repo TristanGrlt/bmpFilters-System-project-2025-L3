@@ -246,9 +246,9 @@ int main(int argc, char *argv[]) {
   // MUTEX CONFIG
   g_config_mutex = sem_open(MUTEX_CONFIG_BMP, O_CREAT | O_EXCL, PERMS, 1);
   if (g_config_mutex == SEM_FAILED) {
-    MESSAGE_ERR_D(argv[0], "sem_open");
-    ret = EXIT_FAILURE;
-    goto dispose;
+    errno = EBUSY;
+    MESSAGE_ERR_D(argv[0], "The server is already running");
+    exit(EXIT_FAILURE);
   }
 
   //---- [SIGNAL HANDLER    ] ------------------------------------------------//
