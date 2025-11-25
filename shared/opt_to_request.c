@@ -22,7 +22,7 @@ int process_options_to_request(int argc, char *argv[], arguments_t *arg) {
     }
   }
 
-  if (argc < 4) {
+  if (argc < 4 || argc > 4) {
     print_help(argv[0]);
     return -1;
   }
