@@ -579,25 +579,22 @@ dispose:
 int apply_filter(filter_t filter, bmp_mapped_image_t *img) {
   int ret = EXIT_SUCCESS;
   int thread_count = calculate_thread_count(img->file_h->file_size);
+  bool is_complex = false;
 
   pthread_t threads[ABSOLUTE_MAX_THREADS];
-  thread_filter_args_t *args = malloc(sizeof(*args) * (size_t)thread_count);
-  if (args == NULL) {
-    MESSAGE_ERR_D("apply_filter", "malloc args");
-    return errno;
-  }
+  thread_filter_args_t args[ABSOLUTE_MAX_THREADS];
   int32_t height =
       img->dib_h->height > 0 ? img->dib_h->height : -img->dib_h->height;
   int32_t *line_distribution =
       calculate_line_distribution(height, thread_count);
   if (line_distribution == nullptr) {
-    MESSAGE_ERR_D("apply_filter", "malloc distribution");
-    free(args);
+    MESSAGE_ERR_D("apply_filter", "distribution");
     return errno;
   }
 
   //---- [SELECT FILTER     ] ------------------------------------------------//
   void *(*filter_func)(void *) = NULL;
+  // SIMPLE OPTIONS
   switch (filter) {
 #define OPT_TO_REQUEST_SIMPLE_FILTER(filter_name, short_flag, long_flag,       \
                                      description, filter_func_ptr)             \
@@ -609,10 +606,40 @@ int apply_filter(filter_t filter, bmp_mapped_image_t *img) {
 #endif
 #undef OPT_TO_REQUEST_SIMPLE_FILTER
   default:
-    errno = EINVAL;
-    MESSAGE_ERR_D("server worker", "Unsuported filter");
-    ret = errno;
-    goto dispose;
+    // COMPLEX OPTIONS
+    is_complex = true;
+    switch (filter) {
+#define OPT_TO_REQUEST_COMPLEX_FILTER(filter_name, short_flag, long_flag,      \
+                                      description, filter_func_ptr)            \
+  case filter_name:                                                            \
+    filter_func = filter_func_ptr;                                             \
+    break;
+#ifdef OPT_TO_REQUEST_COMPLEX_FILTERS
+      OPT_TO_REQUEST_COMPLEX_FILTERS
+#endif
+#undef OPT_TO_REQUEST_COMPLEX_FILTER
+    default:
+      errno = EINVAL;
+      MESSAGE_ERR_D("server worker", "Unsuported filter");
+      ret = errno;
+      goto dispose;
+    }
+  }
+  bmp_mapped_image_t img_ref;
+  if (is_complex) {
+    size_t image_size = img->file_h->file_size;
+    void *ref_data = malloc(image_size);
+    if (ref_data == NULL) {
+      MESSAGE_ERR_D("apply_filter", "malloc");
+      ret = errno;
+      goto dispose;
+    }
+    memcpy(ref_data, img->file_h, image_size);
+
+    img_ref.file_h = (bmp_file_header_t *)ref_data;
+    img_ref.dib_h =
+        (bmp_dib_header_t *)((char *)ref_data + sizeof(bmp_file_header_t));
+    img_ref.pixels = (uint8_t *)ref_data + img->file_h->pixel_array_offset;
   }
 
   //---- [THREAD            ] ------------------------------------------------//
@@ -620,6 +647,9 @@ int apply_filter(filter_t filter, bmp_mapped_image_t *img) {
     args[i].img = img;
     args[i].start_line = line_distribution[i];
     args[i].end_line = line_distribution[i + 1];
+    if (is_complex) {
+      args[i].ref_img = &img_ref;
+    }
     if (pthread_create(&threads[i], NULL, filter_func, &args[i]) != 0) {
       MESSAGE_ERR_D("apply_filter", "pthread_create");
       for (int j = 0; j < i; j++) {
@@ -636,7 +666,9 @@ int apply_filter(filter_t filter, bmp_mapped_image_t *img) {
   }
 
 dispose:
+  if (is_complex) {
+    free(img_ref.file_h);
+  }
   free(line_distribution);
-  free(args);
   return ret;
 }

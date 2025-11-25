@@ -39,6 +39,7 @@ typedef struct {
   bmp_mapped_image_t *img;
   int32_t start_line; // (inclusif)
   int32_t end_line;   // (exclusif)
+  bmp_mapped_image_t *ref_img;
 } thread_filter_args_t;
 
 // identity_filter: Fonction qui prend un parametre de type void *arg pour la
@@ -56,5 +57,14 @@ void *identity_filter(void *arg);
 // lignes start_Line inclusif et end_line exclusif. Cette fonction modifie
 // l'image pointé par img.
 void *blackAndWhite_filter(void *arg);
+
+// blurbox_filter: Fonction qui prend un parametre de type void *arg pour la
+// compataibilité avec des appels par des threads mais qui attend en réalité un
+// pointeur vers une structure de type thread_filter_args_t afin d'appliqué le
+// filtre "flou" sur l'image en mémoire pointé par img entre les
+// lignes start_Line inclusif et end_line exclusif. Cette fonction modifie
+// l'image pointé par img. Elle utilise l'image pointé par ref_img comme
+// référence pour les valeurs des pixels voisins.
+void *blurbox_filter(void *arg);
 
 #endif

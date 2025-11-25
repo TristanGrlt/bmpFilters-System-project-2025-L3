@@ -2,6 +2,7 @@
 #include <fcntl.h>
 #include <linux/limits.h>
 #include <semaphore.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -17,6 +18,24 @@
 
 #include "filters.h"
 #include "opt_to_request.h"
+
+//---- [TIME OUT] ------------------------------------------------------------//
+//----------------------------------------------------------------------------//
+
+void handle_sigalrm(int sig) {
+  (void)sig;
+  MESSAGE_ERR("error :", "Read operation timed out");
+  exit(EXIT_FAILURE);
+}
+
+static void set_read_timeout(unsigned int seconds) {
+  struct sigaction sa;
+  memset(&sa, 0, sizeof(sa));
+  sa.sa_handler = handle_sigalrm;
+  sa.sa_flags = 0;
+  sigaction(SIGALRM, &sa, NULL);
+  alarm(seconds);
+}
 
 //---- [CODE] ----------------------------------------------------------------//
 //----------------------------------------------------------------------------//
@@ -107,6 +126,7 @@ int main(int argc, char *argv[]) {
   }
   // READ TO DETECT EXIT_FAILURE OF THE SERVER
   int err;
+  set_read_timeout(5);
   full_read(fifo, &err, sizeof(err));
   if (err != EXIT_SUCCESS) {
     errno = err;
@@ -116,6 +136,7 @@ int main(int argc, char *argv[]) {
   } else {
     printf("filter applyed with succes, getting the image back...\n");
   }
+  alarm(0);
 
   // READ IMAGE BACK
   int fd_out = open(args.output, O_WRONLY | O_CREAT | O_TRUNC, PERMS);
@@ -136,6 +157,7 @@ int main(int argc, char *argv[]) {
   size_t count = (size_t)s.st_size;
   char buffer[PIPE_BUF];
   while (count > 0) {
+    set_read_timeout(5);
     size_t n_r = count;
     if (n_r > PIPE_BUF) {
       n_r = PIPE_BUF;
@@ -153,8 +175,8 @@ int main(int argc, char *argv[]) {
       goto dispose;
     }
     count -= n_r;
+    alarm(0);
   }
-
   if (close(fd_out) == -1) {
     MESSAGE_ERR(argv[0], "close output file");
     ret = EXIT_FAILURE;
@@ -164,6 +186,7 @@ int main(int argc, char *argv[]) {
   printf("Image created with success\n");
 
 dispose:
+  alarm(0);
   if (rqs != MAP_FAILED) {
     if (munmap(rqs, sizeof(request_t)) == -1) {
       MESSAGE_ERR(argv[0], "munmap");

@@ -29,12 +29,14 @@
 // - OPT_TO_REQUEST_SIMPLE_FILTER : macro paramétrée pour la déclaration d'un
 // filtre individuel.
 
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 
 #include "filters.h"
+#include <linux/limits.h>
 
 #define REQUEST_FIFO_SIZE 10
 #define MAX_PATH_LENGTH 4096
@@ -61,12 +63,18 @@
 #endif
 
 #define OPT_TO_REQUEST_SIMPLE_FILTER(filter, ...) filter,
+#define OPT_TO_REQUEST_COMPLEX_FILTER(filter, ...) filter,
+
 typedef enum {
 #ifdef OPT_TO_REQUEST_SIMPLE_FILTERS
   OPT_TO_REQUEST_SIMPLE_FILTERS
 #endif
-} filter_t;
 #undef OPT_TO_REQUEST_SIMPLE_FILTER
+#ifdef OPT_TO_REQUEST_COMPLEX_FILTERS
+      OPT_TO_REQUEST_COMPLEX_FILTERS
+#endif
+#undef OPT_TO_REQUEST_COMPLEX_FILTER
+} filter_t;
 
 // STRUCTURE
 typedef struct {

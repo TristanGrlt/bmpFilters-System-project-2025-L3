@@ -30,6 +30,7 @@ int process_options_to_request(int argc, char *argv[], arguments_t *arg) {
   arg->input = argv[1];
   arg->output = argv[2];
 
+  // SIMPLE OPTIONS
 #define OPT_TO_REQUEST_SIMPLE_FILTER(filter_name, short_flag, long_flag, ...)  \
   else if (strcmp(argv[3], OPT_TO_REQUEST_SHORT_PREFIX short_flag) == 0) {     \
     arg->filter = filter_name;                                                 \
@@ -37,17 +38,29 @@ int process_options_to_request(int argc, char *argv[], arguments_t *arg) {
   else if (strcmp(argv[3], OPT_TO_REQUEST_LONG_PREFIX long_flag) == 0) {       \
     arg->filter = filter_name;                                                 \
   }
-#ifdef OPT_TO_REQUEST_SIMPLE_FILTERS
+// COMPLEX OPTIONS
+#define OPT_TO_REQUEST_COMPLEX_FILTER(filter_name, short_flag, long_flag, ...) \
+  else if (strcmp(argv[3], OPT_TO_REQUEST_SHORT_PREFIX short_flag) == 0) {     \
+    arg->filter = filter_name;                                                 \
+  }                                                                            \
+  else if (strcmp(argv[3], OPT_TO_REQUEST_LONG_PREFIX long_flag) == 0) {       \
+    arg->filter = filter_name;                                                 \
+  }
   if (false) {
   }
+#ifdef OPT_TO_REQUEST_SIMPLE_FILTERS
   OPT_TO_REQUEST_SIMPLE_FILTERS
+#endif
+#undef OPT_TO_REQUEST_SIMPLE_FILTER
+#ifdef OPT_TO_REQUEST_COMPLEX_FILTERS
+  OPT_TO_REQUEST_COMPLEX_FILTERS
+#endif
+#undef OPT_TO_REQUEST_COMPLEX_FILTER
   else {
     fprintf(stderr, "Error: Unknown filter '%s'\n", argv[3]);
     print_help(argv[0]);
     return -1;
   }
-#endif
-#undef OPT_TO_REQUEST_SIMPLE_FILTER
 
   return 0;
 }
@@ -64,6 +77,14 @@ void print_help(const char *exec_name) {
          OPT_TO_REQUEST_LONG_PREFIX, long_flag);
   OPT_TO_REQUEST_SIMPLE_FILTERS
 #undef OPT_TO_REQUEST_SIMPLE_FILTER
+#endif
+
+#ifdef OPT_TO_REQUEST_COMPLEX_FILTERS
+#define OPT_TO_REQUEST_COMPLEX_FILTER(filter_name, short_flag, long_flag, ...) \
+  printf("[%s%s|%s%s] ", OPT_TO_REQUEST_SHORT_PREFIX, short_flag,              \
+         OPT_TO_REQUEST_LONG_PREFIX, long_flag);
+  OPT_TO_REQUEST_COMPLEX_FILTERS
+#undef OPT_TO_REQUEST_COMPLEX_FILTER
 #endif
 
   printf("\n\n");
@@ -103,6 +124,19 @@ void print_help(const char *exec_name) {
 #undef OPT_TO_REQUEST_SIMPLE_FILTER
 #endif
 
+#ifdef OPT_TO_REQUEST_COMPLEX_FILTERS
+#define OPT_TO_REQUEST_COMPLEX_FILTER(filter_name, short_flag, long_flag, ...) \
+  do {                                                                         \
+    int len =                                                                  \
+        (int)(strlen(short_flag) + strlen(OPT_TO_REQUEST_SHORT_PREFIX) + 2 +   \
+              strlen(long_flag) + strlen(OPT_TO_REQUEST_LONG_PREFIX));         \
+    if (len > max_width)                                                       \
+      max_width = len;                                                         \
+  } while (0);
+  OPT_TO_REQUEST_COMPLEX_FILTERS
+#undef OPT_TO_REQUEST_COMPLEX_FILTER
+#endif
+
   // Print arguments section
   printf("ARGUMENTS:\n");
   printf("\t<%s>%*s\t%s\n", INPUT_ARG_LABEL,
@@ -140,5 +174,20 @@ void print_help(const char *exec_name) {
   } while (0);
   OPT_TO_REQUEST_SIMPLE_FILTERS
 #undef OPT_TO_REQUEST_SIMPLE_FILTER
+#endif
+
+#ifdef OPT_TO_REQUEST_COMPLEX_FILTERS
+#define OPT_TO_REQUEST_COMPLEX_FILTER(filter_name, short_flag, long_flag,      \
+                                      description, ...)                        \
+  do {                                                                         \
+    char opt_str[256];                                                         \
+    snprintf(opt_str, sizeof(opt_str), "%s%s, %s%s",                           \
+             OPT_TO_REQUEST_SHORT_PREFIX, short_flag,                          \
+             OPT_TO_REQUEST_LONG_PREFIX, long_flag);                           \
+    printf("\t%s%*s\t%s\n", opt_str, max_width - (int)strlen(opt_str), "",     \
+           description);                                                       \
+  } while (0);
+  OPT_TO_REQUEST_COMPLEX_FILTERS
+#undef OPT_TO_REQUEST_COMPLEX_FILTER
 #endif
 }

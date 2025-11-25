@@ -21,9 +21,10 @@
                                identity_filter)                                \
   OPT_TO_REQUEST_SIMPLE_FILTER(blackAndWhite, "bw", "blackAndWhite",           \
                                "Apply a black and white filter to the image",  \
-                               blackAndWhite_filter)                           \
-  OPT_TO_REQUEST_SIMPLE_FILTER(toto, "t", "toto",                              \
-                               "Apply a toto filter to the image",             \
                                blackAndWhite_filter)
+
+#define OPT_TO_REQUEST_COMPLEX_FILTERS                                         \
+  OPT_TO_REQUEST_COMPLEX_FILTER(                                               \
+      blur, "b", "blur", "Apply a blur filter to the image", blurbox_filter)
 
 #endif
