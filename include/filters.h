@@ -25,6 +25,48 @@
 
 #define OPT_TO_REQUEST_COMPLEX_FILTERS                                         \
   OPT_TO_REQUEST_COMPLEX_FILTER(                                               \
-      blur, "b", "blur", "Apply a blur filter to the image", blurbox_filter)
+      blur, "bl", "blur", "Apply a box blur filter (3x3)", blurbox_filter)     \
+  OPT_TO_REQUEST_COMPLEX_FILTER(gaussian_blur, "gb", "gaussian-blur",          \
+                                "Apply a gaussian blur filter (3x3)",          \
+                                gaussian_blur_filter)                          \
+  OPT_TO_REQUEST_COMPLEX_FILTER(gaussian_blur5x5, "gb5", "gaussian-blur-5x5",  \
+                                "Apply a strong gaussian blur (5x5)",          \
+                                gaussian_blur5x5_filter)                       \
+  OPT_TO_REQUEST_COMPLEX_FILTER(sharpen, "sh", "sharpen",                      \
+                                "Apply a sharpen filter", sharpen_filter)      \
+  OPT_TO_REQUEST_COMPLEX_FILTER(sharpen_intense, "shi", "sharpen-intense",     \
+                                "Apply an intense sharpen filter",             \
+                                sharpen_intense_filter)                        \
+  OPT_TO_REQUEST_COMPLEX_FILTER(edge_detect, "ed", "edge-detect",              \
+                                "Apply edge detection", edge_detect_filter)    \
+  OPT_TO_REQUEST_COMPLEX_FILTER(sobel_h, "soh", "sobel-horizontal",            \
+                                "Apply Sobel horizontal edge detection",       \
+                                sobel_horizontal_filter)                       \
+  OPT_TO_REQUEST_COMPLEX_FILTER(sobel_v, "sov", "sobel-vertical",              \
+                                "Apply Sobel vertical edge detection",         \
+                                sobel_vertical_filter)                         \
+  OPT_TO_REQUEST_COMPLEX_FILTER(laplacian, "lap", "laplacian",                 \
+                                "Apply Laplacian edge detection",              \
+                                laplacian_filter)                              \
+  OPT_TO_REQUEST_COMPLEX_FILTER(emboss, "em", "emboss",                        \
+                                "Apply an emboss effect", emboss_filter)       \
+  OPT_TO_REQUEST_COMPLEX_FILTER(emboss_intense, "emi", "emboss-intense",       \
+                                "Apply an intense emboss effect",              \
+                                emboss_intense_filter)                         \
+  OPT_TO_REQUEST_COMPLEX_FILTER(motion_blur, "mb", "motion-blur",              \
+                                "Apply diagonal motion blur",                  \
+                                motion_blur_filter)                            \
+  OPT_TO_REQUEST_COMPLEX_FILTER(                                               \
+      motion_blur_h, "mbh", "motion-blur-horizontal",                          \
+      "Apply horizontal motion blur", motion_blur_horizontal_filter)           \
+  OPT_TO_REQUEST_COMPLEX_FILTER(motion_blur_v, "mbv", "motion-blur-vertical",  \
+                                "Apply vertical motion blur",                  \
+                                motion_blur_vertical_filter)                   \
+  OPT_TO_REQUEST_COMPLEX_FILTER(oil_painting, "oil", "oil-painting",           \
+                                "Apply oil painting effect",                   \
+                                oil_painting_filter)                           \
+  OPT_TO_REQUEST_COMPLEX_FILTER(crosshatch, "ch", "crosshatch",                \
+                                "Apply crosshatch drawing effect",             \
+                                crosshatch_filter)
 
 #endif

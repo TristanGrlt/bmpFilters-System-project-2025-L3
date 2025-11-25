@@ -133,3 +133,107 @@ void *blurbox_filter(void *arg) {
   convolution_matrix_t conv = {.matrix = matrix_data, .size = 3};
   return generic_convolution_filter(arg, &conv);
 }
+
+void *gaussian_blur_filter(void *arg) {
+  float matrix_data[9] = {1.0f, 2.0f, 1.0f, 2.0f, 4.0f, 2.0f, 1.0f, 2.0f, 1.0f};
+  convolution_matrix_t conv = {.matrix = matrix_data, .size = 3};
+  return generic_convolution_filter(arg, &conv);
+}
+
+void *gaussian_blur5x5_filter(void *arg) {
+  float matrix_data[25] = {1.0f,  4.0f,  6.0f,  4.0f,  1.0f,  4.0f,  16.0f,
+                           24.0f, 16.0f, 4.0f,  6.0f,  24.0f, 36.0f, 24.0f,
+                           6.0f,  4.0f,  16.0f, 24.0f, 16.0f, 4.0f,  1.0f,
+                           4.0f,  6.0f,  4.0f,  1.0f};
+  convolution_matrix_t conv = {.matrix = matrix_data, .size = 5};
+  return generic_convolution_filter(arg, &conv);
+}
+
+void *sharpen_filter(void *arg) {
+  float matrix_data[9] = {0.0f,  -1.0f, 0.0f,  -1.0f, 5.0f,
+                          -1.0f, 0.0f,  -1.0f, 0.0f};
+  convolution_matrix_t conv = {.matrix = matrix_data, .size = 3};
+  return generic_convolution_filter(arg, &conv);
+}
+
+void *sharpen_intense_filter(void *arg) {
+  float matrix_data[9] = {-1.0f, -1.0f, -1.0f, -1.0f, 9.0f,
+                          -1.0f, -1.0f, -1.0f, -1.0f};
+  convolution_matrix_t conv = {.matrix = matrix_data, .size = 3};
+  return generic_convolution_filter(arg, &conv);
+}
+
+void *edge_detect_filter(void *arg) {
+  float matrix_data[9] = {-1.0f, -1.0f, -1.0f, -1.0f, 8.0f,
+                          -1.0f, -1.0f, -1.0f, -1.0f};
+  convolution_matrix_t conv = {.matrix = matrix_data, .size = 3};
+  return generic_convolution_filter(arg, &conv);
+}
+
+void *sobel_horizontal_filter(void *arg) {
+  float matrix_data[9] = {-1.0f, -2.0f, -1.0f, 0.0f, 0.0f,
+                          0.0f,  1.0f,  2.0f,  1.0f};
+  convolution_matrix_t conv = {.matrix = matrix_data, .size = 3};
+  return generic_convolution_filter(arg, &conv);
+}
+
+void *sobel_vertical_filter(void *arg) {
+  float matrix_data[9] = {-1.0f, 0.0f,  1.0f, -2.0f, 0.0f,
+                          2.0f,  -1.0f, 0.0f, 1.0f};
+  convolution_matrix_t conv = {.matrix = matrix_data, .size = 3};
+  return generic_convolution_filter(arg, &conv);
+}
+
+void *laplacian_filter(void *arg) {
+  float matrix_data[9] = {0.0f, 1.0f, 0.0f, 1.0f, -4.0f,
+                          1.0f, 0.0f, 1.0f, 0.0f};
+  convolution_matrix_t conv = {.matrix = matrix_data, .size = 3};
+  return generic_convolution_filter(arg, &conv);
+}
+
+void *emboss_filter(void *arg) {
+  float matrix_data[9] = {-2.0f, -1.0f, 0.0f, -1.0f, 1.0f,
+                          1.0f,  0.0f,  1.0f, 2.0f};
+  convolution_matrix_t conv = {.matrix = matrix_data, .size = 3};
+  return generic_convolution_filter(arg, &conv);
+}
+
+void *emboss_intense_filter(void *arg) {
+  float matrix_data[9] = {-4.0f, -2.0f, 0.0f, -2.0f, 1.0f,
+                          2.0f,  0.0f,  2.0f, 4.0f};
+  convolution_matrix_t conv = {.matrix = matrix_data, .size = 3};
+  return generic_convolution_filter(arg, &conv);
+}
+
+void *motion_blur_filter(void *arg) {
+  float matrix_data[9] = {1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 1.0f};
+  convolution_matrix_t conv = {.matrix = matrix_data, .size = 3};
+  return generic_convolution_filter(arg, &conv);
+}
+
+void *motion_blur_horizontal_filter(void *arg) {
+  float matrix_data[9] = {0.0f, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f, 0.0f, 0.0f, 0.0f};
+  convolution_matrix_t conv = {.matrix = matrix_data, .size = 3};
+  return generic_convolution_filter(arg, &conv);
+}
+
+void *motion_blur_vertical_filter(void *arg) {
+  float matrix_data[9] = {0.0f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f};
+  convolution_matrix_t conv = {.matrix = matrix_data, .size = 3};
+  return generic_convolution_filter(arg, &conv);
+}
+
+void *oil_painting_filter(void *arg) {
+  float matrix_data[25] = {1.0f, 2.0f, 3.0f, 2.0f, 1.0f, 2.0f, 4.0f, 5.0f, 4.0f,
+                           2.0f, 3.0f, 5.0f, 6.0f, 5.0f, 3.0f, 2.0f, 4.0f, 5.0f,
+                           4.0f, 2.0f, 1.0f, 2.0f, 3.0f, 2.0f, 1.0f};
+  convolution_matrix_t conv = {.matrix = matrix_data, .size = 5};
+  return generic_convolution_filter(arg, &conv);
+}
+
+void *crosshatch_filter(void *arg) {
+  float matrix_data[9] = {1.0f, 1.0f, 1.0f, 1.0f, -7.0f,
+                          1.0f, 1.0f, 1.0f, 1.0f};
+  convolution_matrix_t conv = {.matrix = matrix_data, .size = 3};
+  return generic_convolution_filter(arg, &conv);
+}

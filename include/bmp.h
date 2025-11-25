@@ -66,5 +66,20 @@ void *blackAndWhite_filter(void *arg);
 // l'image pointé par img. Elle utilise l'image pointé par ref_img comme
 // référence pour les valeurs des pixels voisins.
 void *blurbox_filter(void *arg);
+void *gaussian_blur_filter(void *arg);
+void *gaussian_blur5x5_filter(void *arg);
+void *sharpen_filter(void *arg);
+void *sharpen_intense_filter(void *arg);
+void *edge_detect_filter(void *arg);
+void *sobel_horizontal_filter(void *arg);
+void *sobel_vertical_filter(void *arg);
+void *laplacian_filter(void *arg);
+void *emboss_filter(void *arg);
+void *emboss_intense_filter(void *arg);
+void *motion_blur_filter(void *arg);
+void *motion_blur_horizontal_filter(void *arg);
+void *motion_blur_vertical_filter(void *arg);
+void *oil_painting_filter(void *arg);
+void *crosshatch_filter(void *arg);
 
 #endif
