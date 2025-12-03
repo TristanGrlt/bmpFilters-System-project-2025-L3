@@ -1,12 +1,12 @@
 `./server -f` lance le server en foreground sinon deamon
 
-## Si deamon, quelque commande importante :
+## Si deamon, quelque commande :
 
 ```bash
-# Voir tous les logs de votre programme
+# Voir les logs
 journalctl -t bmp_server
 
-# Voir les logs en temps réel (comme tail -f)
+# Voir les logs en temps réel
 journalctl -t bmp_server -f
 
 # Voir les logs seulement s'il y a des erreurs
@@ -14,7 +14,7 @@ journalctl -t bmp_server -p err
 ```
 
 ```bash
-# Envoie SIGINT (ce que votre code attend pour s'arrêter proprement)
+# Envoie SIGINT (arret du server)
 kill -SIGINT $(cat /tmp/bmp_server.pid)
 ```
 
